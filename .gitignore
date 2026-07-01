@@ -1,0 +1,20 @@
+# Env files — never commit secrets
+.env
+.env.local
+backend/.env
+frontend/.env.local
+
+# Foundry build artifacts
+contracts/out/
+contracts/cache/
+
+# Rust build artifacts
+backend/target/
+
+# Next.js build artifacts
+frontend/.next/
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
