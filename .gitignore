@@ -18,3 +18,8 @@ frontend/node_modules/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local working files — never push
+plan.md
+CONCEPT.md
+.claude/
