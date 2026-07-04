@@ -17,6 +17,8 @@ struct TransactionPayload {
 
 #[derive(Deserialize)]
 pub struct SignedTransaction {
+    // Read once the scheduler's payment path calls send_transaction.
+    #[allow(dead_code)]
     pub tx_hash: String,
 }
 
@@ -30,6 +32,10 @@ impl OpenfortClient {
 
     // Signs and submits a transaction through Openfort's TEE wallet.
     // Returns the on-chain tx hash.
+    //
+    // Not yet called: the scheduler's payment path is blocked on
+    // PaymentExecutor.executePayment landing on-chain. Kept wired and ready.
+    #[allow(dead_code)]
     pub async fn send_transaction(
         &self,
         to: &str,
