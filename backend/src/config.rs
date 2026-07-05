@@ -6,6 +6,8 @@ pub struct Config {
     pub openfort_secret_key: String,
     pub arbitrum_rpc: String,
     pub registry_address: String,
+    /// Read once the vault's `balances()` is surfaced for dashboard/history.
+    #[allow(dead_code)]
     pub vault_address: String,
     /// How often the scheduler checks for due payments (seconds)
     pub scheduler_interval_secs: u64,

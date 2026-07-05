@@ -1,4 +1,5 @@
 mod api;
+mod chain;
 mod config;
 mod errors;
 mod models;
@@ -10,7 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 
 #[tokio::main]
 async fn main() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     tracing_subscriber::registry()
         .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
@@ -19,12 +20,16 @@ async fn main() {
 
     let cfg = config::Config::from_env();
 
-    // Spawn the scheduler as a background task
-    tokio::spawn(scheduler::run(cfg.clone()));
+    // Shared chain access (provider + registry address + Openfort client),
+    // cloned into both the scheduler and the API router.
+    let state = chain::AppState::new(cfg).expect("failed to initialise chain state");
 
-    let app = Router::new().nest("/api", api::router());
+    // Spawn the scheduler as a background task.
+    tokio::spawn(scheduler::run(state.clone()));
 
-    let addr = format!("0.0.0.0:{}", cfg.port);
+    let app = Router::new().nest("/api", api::router(state.clone()));
+
+    let addr = format!("0.0.0.0:{}", state.cfg.port);
     tracing::info!("listening on {addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

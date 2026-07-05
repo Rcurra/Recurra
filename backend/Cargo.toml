@@ -10,6 +10,10 @@ reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
-dotenv = "0.15"
+dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Ethereum client: typed contract bindings via the sol! macro + JSON-RPC provider.
+# `full` pulls in providers, contract, sol-types and the HTTP transport.
+alloy = { version = "1", features = ["full"] }
