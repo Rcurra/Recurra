@@ -191,5 +191,19 @@ contract SubscriptionRegistry is Ownable {
         emit PaymentRecorded(subId, sub.nextPaymentDue);
     }
 
-    // TODO: view helpers (isDue, getSubscriberSubs)
+    /// The scheduler's question, answered on-chain so due-ness logic lives in
+    /// exactly one place. False for nonexistent ids (both actives default false),
+    /// cancelled subs, deactivated plans, and not-yet-due schedules. Never
+    /// reverts — the scheduler filters with it, it doesn't act on it.
+    function isDue(uint256 subId) external view returns (bool) {
+        Subscription storage sub = subscriptions[subId];
+        return sub.active && plans[sub.planId].active && block.timestamp >= sub.nextPaymentDue;
+    }
+
+    /// Full id list in one call (cancelled subs included — it's history).
+    /// The subscriberSubs auto-getter only serves one index at a time and
+    /// exposes no length, so the backend couldn't enumerate without this.
+    function getSubscriberSubs(address subscriber) external view returns (uint256[] memory) {
+        return subscriberSubs[subscriber];
+    }
 }
