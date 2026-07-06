@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 // Stores subscription plans and tracks when each subscriber's next payment is due.
-contract SubscriptionRegistry {
+contract SubscriptionRegistry is Ownable {
     struct Plan {
         address merchant;
         address token;      // ERC-20 token accepted for payment
@@ -29,11 +31,16 @@ contract SubscriptionRegistry {
     // subscriber → planId → true while subscribed (blocks double-subscribing)
     mapping(address => mapping(uint256 => bool)) public hasActiveSubscription;
 
+    // The PaymentExecutor — the only address allowed to call markPaid.
+    // Wired once at deploy (see setExecutor), then immutable in practice.
+    address public executor;
+
     event PlanCreated(uint256 indexed planId, address indexed merchant);
     event PlanDeactivated(uint256 indexed planId);
     event Subscribed(uint256 indexed subId, address indexed subscriber, uint256 indexed planId);
     event Unsubscribed(uint256 indexed subId);
     event PaymentRecorded(uint256 indexed subId, uint256 nextPaymentDue);
+    event ExecutorSet(address executor);
 
     error InvalidPlanParams(); // zero token / amount / interval
     error PlanNotActive(); // plan nonexistent or already deactivated
@@ -41,6 +48,22 @@ contract SubscriptionRegistry {
     error NotPlanMerchant(); // deactivatePlan by anyone but the plan's merchant
     error NotSubscriber(); // unsubscribe by anyone but the subscription's owner
     error SubscriptionNotActive(); // acting on a nonexistent or cancelled subscription
+    error NotExecutor(); // markPaid by anyone but the PaymentExecutor
+    error ExecutorAlreadySet(); // one-time wiring guard
+    error ZeroAddress(); // setExecutor(0) would brick markPaid forever
+
+    constructor() Ownable(msg.sender) {}
+
+    /// One-time deploy wiring: points markPaid's gate at the PaymentExecutor.
+    /// Owner-only and unrepeatable — after this, not even we can redirect who
+    /// records payments. (Executor rotation happens on the Executor side via
+    /// setAuthorizedExecutor; this link is permanent by design.)
+    function setExecutor(address newExecutor) external onlyOwner {
+        if (newExecutor == address(0)) revert ZeroAddress();
+        if (executor != address(0)) revert ExecutorAlreadySet();
+        executor = newExecutor;
+        emit ExecutorSet(newExecutor);
+    }
 
     /// Merchant entry point. Whoever calls this becomes the plan's merchant —
     /// there's no merchant registration step; the plan IS the registration.
