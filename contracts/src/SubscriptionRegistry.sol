@@ -30,13 +30,15 @@ contract SubscriptionRegistry {
     mapping(address => mapping(uint256 => bool)) public hasActiveSubscription;
 
     event PlanCreated(uint256 indexed planId, address indexed merchant);
+    event PlanDeactivated(uint256 indexed planId);
     event Subscribed(uint256 indexed subId, address indexed subscriber, uint256 indexed planId);
     event Unsubscribed(uint256 indexed subId);
     event PaymentRecorded(uint256 indexed subId, uint256 nextPaymentDue);
 
     error InvalidPlanParams(); // zero token / amount / interval
-    error PlanNotActive(); // subscribe to nonexistent or deactivated plan
+    error PlanNotActive(); // plan nonexistent or already deactivated
     error AlreadySubscribed(); // double-subscribe to same plan
+    error NotPlanMerchant(); // deactivatePlan by anyone but the plan's merchant
 
     /// Merchant entry point. Whoever calls this becomes the plan's merchant —
     /// there's no merchant registration step; the plan IS the registration.
@@ -58,6 +60,25 @@ contract SubscriptionRegistry {
         plans[planId] = Plan({merchant: msg.sender, token: token, amount: amount, interval: interval, active: true});
 
         emit PlanCreated(planId, msg.sender);
+    }
+
+    /// Merchant kill switch for their own plan. New subscriptions become
+    /// impossible (subscribe checks plan.active) and the PaymentExecutor will
+    /// refuse charges for existing subs — but those subs survive on-chain, so
+    /// subscribers keep their history and can unsubscribe + withdraw normally.
+    function deactivatePlan(uint256 planId) external {
+        Plan storage plan = plans[planId];
+
+        // Active-check first: a nonexistent plan has merchant == address(0),
+        // so checking the merchant first would throw a misleading
+        // NotPlanMerchant at whoever probes a bad id. Also makes
+        // double-deactivation an explicit revert, not a silent no-op.
+        if (!plan.active) revert PlanNotActive();
+        if (msg.sender != plan.merchant) revert NotPlanMerchant();
+
+        plan.active = false;
+
+        emit PlanDeactivated(planId);
     }
 
     /// Subscriber entry point. Called by the user's (7702 smart) account from the
