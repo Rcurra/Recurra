@@ -34,18 +34,23 @@ contract SubscriptionRegistry {
     event Unsubscribed(uint256 indexed subId);
     event PaymentRecorded(uint256 indexed subId, uint256 nextPaymentDue);
 
+    error InvalidPlanParams(); // zero token / amount / interval
+    error PlanNotActive(); // subscribe to nonexistent or deactivated plan
+    error AlreadySubscribed(); // double-subscribe to same plan
+
     /// Merchant entry point. Whoever calls this becomes the plan's merchant —
     /// there's no merchant registration step; the plan IS the registration.
     /// Example: createPlan(USDC, 10e6, 30 days) = "10 USDC every 30 days, paid to me".
     function createPlan(address token, uint256 amount, uint256 interval) external returns (uint256 planId) {
         // Reject broken plans up front: a zero token/amount/interval plan could
         // never be paid (or would be chargeable every block).
-        require(token != address(0), "token is zero address");
-        require(amount > 0, "amount must be > 0");
-        require(interval > 0, "interval must be > 0");
+        if (token == address(0) || amount == 0 || interval == 0) revert InvalidPlanParams();
 
         // Grab the next free ID, then bump the counter for the plan after this one.
-        planId = nextPlanId++;
+        // unchecked: a uint256 id counter can't realistically overflow.
+        unchecked {
+            planId = nextPlanId++;
+        }
 
         // msg.sender is baked in as the merchant — later, PaymentExecutor reads
         // amount/token/merchant from THIS struct, never from backend calldata.
@@ -62,13 +67,16 @@ contract SubscriptionRegistry {
 
         // One check covers two cases: a nonexistent plan has active == false
         // (default struct value), and a merchant-deactivated plan is also false.
-        require(plan.active, "plan not active");
+        if (!plan.active) revert PlanNotActive();
 
         // Without this, a double-click on the subscribe button = two live
         // subscriptions = double-charged every interval.
-        require(!hasActiveSubscription[msg.sender][planId], "already subscribed");
+        if (hasActiveSubscription[msg.sender][planId]) revert AlreadySubscribed();
 
-        subId = nextSubId++;
+        // unchecked: same reasoning as the plan id counter.
+        unchecked {
+            subId = nextSubId++;
+        }
 
         // nextPaymentDue = now → the FIRST charge is due immediately, so the
         // scheduler picks it up on its next tick. The merchant gets paid at the
