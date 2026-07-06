@@ -158,5 +158,38 @@ contract SubscriptionRegistry is Ownable {
         emit Unsubscribed(subId);
     }
 
-    // TODO: implement recordPayment (markPaid), view helpers
+    /// Called by the PaymentExecutor (and no one else) right before it moves
+    /// money, to advance the schedule. Records no amounts — the Registry
+    /// never touches tokens; it only answers "when is the next one due?".
+    ///
+    /// Due-date math (invariant #2 — at most one charge per due date, missed
+    /// cycles forgiven, never batch-collected):
+    ///   - on time / slightly late: nextPaymentDue += interval. Anchored to
+    ///     the original schedule, so scheduler lag never drifts the cycle.
+    ///   - a full interval (or more) behind: nextPaymentDue = now + interval.
+    ///     Re-anchor from today; the skipped cycles are simply gone. Advancing
+    ///     by += here would leave nextPaymentDue in the past and let charges
+    ///     fire back-to-back until it caught up — batch collection, forbidden.
+    ///
+    /// Deliberately no "too early" check: NotDue lives in the Executor (per
+    /// the frozen catalog), and markPaid is Executor-only anyway.
+    function markPaid(uint256 subId) external {
+        if (msg.sender != executor) revert NotExecutor();
+
+        Subscription storage sub = subscriptions[subId];
+        if (!sub.active) revert SubscriptionNotActive();
+
+        uint256 interval = plans[sub.planId].interval;
+        uint256 due = sub.nextPaymentDue;
+
+        if (block.timestamp >= due + interval) {
+            sub.nextPaymentDue = block.timestamp + interval;
+        } else {
+            sub.nextPaymentDue = due + interval;
+        }
+
+        emit PaymentRecorded(subId, sub.nextPaymentDue);
+    }
+
+    // TODO: view helpers (isDue, getSubscriberSubs)
 }
