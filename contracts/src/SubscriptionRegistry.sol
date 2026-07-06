@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
 // Stores subscription plans and tracks when each subscriber's next payment is due.
-contract SubscriptionRegistry {
+contract SubscriptionRegistry is Ownable {
     struct Plan {
         address merchant;
         address token;      // ERC-20 token accepted for payment
@@ -29,14 +31,39 @@ contract SubscriptionRegistry {
     // subscriber → planId → true while subscribed (blocks double-subscribing)
     mapping(address => mapping(uint256 => bool)) public hasActiveSubscription;
 
+    // The PaymentExecutor — the only address allowed to call markPaid.
+    // Wired once at deploy (see setExecutor), then immutable in practice.
+    address public executor;
+
     event PlanCreated(uint256 indexed planId, address indexed merchant);
+    event PlanDeactivated(uint256 indexed planId);
     event Subscribed(uint256 indexed subId, address indexed subscriber, uint256 indexed planId);
     event Unsubscribed(uint256 indexed subId);
     event PaymentRecorded(uint256 indexed subId, uint256 nextPaymentDue);
+    event ExecutorSet(address executor);
 
     error InvalidPlanParams(); // zero token / amount / interval
-    error PlanNotActive(); // subscribe to nonexistent or deactivated plan
+    error PlanNotActive(); // plan nonexistent or already deactivated
     error AlreadySubscribed(); // double-subscribe to same plan
+    error NotPlanMerchant(); // deactivatePlan by anyone but the plan's merchant
+    error NotSubscriber(); // unsubscribe by anyone but the subscription's owner
+    error SubscriptionNotActive(); // acting on a nonexistent or cancelled subscription
+    error NotExecutor(); // markPaid by anyone but the PaymentExecutor
+    error ExecutorAlreadySet(); // one-time wiring guard
+    error ZeroAddress(); // setExecutor(0) would brick markPaid forever
+
+    constructor() Ownable(msg.sender) {}
+
+    /// One-time deploy wiring: points markPaid's gate at the PaymentExecutor.
+    /// Owner-only and unrepeatable — after this, not even we can redirect who
+    /// records payments. (Executor rotation happens on the Executor side via
+    /// setAuthorizedExecutor; this link is permanent by design.)
+    function setExecutor(address newExecutor) external onlyOwner {
+        if (newExecutor == address(0)) revert ZeroAddress();
+        if (executor != address(0)) revert ExecutorAlreadySet();
+        executor = newExecutor;
+        emit ExecutorSet(newExecutor);
+    }
 
     /// Merchant entry point. Whoever calls this becomes the plan's merchant —
     /// there's no merchant registration step; the plan IS the registration.
@@ -58,6 +85,25 @@ contract SubscriptionRegistry {
         plans[planId] = Plan({merchant: msg.sender, token: token, amount: amount, interval: interval, active: true});
 
         emit PlanCreated(planId, msg.sender);
+    }
+
+    /// Merchant kill switch for their own plan. New subscriptions become
+    /// impossible (subscribe checks plan.active) and the PaymentExecutor will
+    /// refuse charges for existing subs — but those subs survive on-chain, so
+    /// subscribers keep their history and can unsubscribe + withdraw normally.
+    function deactivatePlan(uint256 planId) external {
+        Plan storage plan = plans[planId];
+
+        // Active-check first: a nonexistent plan has merchant == address(0),
+        // so checking the merchant first would throw a misleading
+        // NotPlanMerchant at whoever probes a bad id. Also makes
+        // double-deactivation an explicit revert, not a silent no-op.
+        if (!plan.active) revert PlanNotActive();
+        if (msg.sender != plan.merchant) revert NotPlanMerchant();
+
+        plan.active = false;
+
+        emit PlanDeactivated(planId);
     }
 
     /// Subscriber entry point. Called by the user's (7702 smart) account from the
@@ -93,5 +139,71 @@ contract SubscriptionRegistry {
         emit Subscribed(subId, msg.sender, planId);
     }
 
-    // TODO: implement unsubscribe, recordPayment (markPaid), view helpers
+    /// Subscriber cancel, anytime, no merchant approval. Stops future charges
+    /// (Executor checks sub.active); escrow stays withdrawable in the Vault.
+    /// Moves no money — the Registry never touches tokens.
+    function unsubscribe(uint256 subId) external {
+        Subscription storage sub = subscriptions[subId];
+
+        // State first, authority second — same reasoning as deactivatePlan:
+        // a nonexistent sub has subscriber == address(0).
+        if (!sub.active) revert SubscriptionNotActive();
+        if (msg.sender != sub.subscriber) revert NotSubscriber();
+
+        sub.active = false;
+        // Reopen the door: they can subscribe to this plan again later.
+        // The old sub stays in subscriberSubs as history (append-only).
+        hasActiveSubscription[msg.sender][sub.planId] = false;
+
+        emit Unsubscribed(subId);
+    }
+
+    /// Called by the PaymentExecutor (and no one else) right before it moves
+    /// money, to advance the schedule. Records no amounts — the Registry
+    /// never touches tokens; it only answers "when is the next one due?".
+    ///
+    /// Due-date math (invariant #2 — at most one charge per due date, missed
+    /// cycles forgiven, never batch-collected):
+    ///   - on time / slightly late: nextPaymentDue += interval. Anchored to
+    ///     the original schedule, so scheduler lag never drifts the cycle.
+    ///   - a full interval (or more) behind: nextPaymentDue = now + interval.
+    ///     Re-anchor from today; the skipped cycles are simply gone. Advancing
+    ///     by += here would leave nextPaymentDue in the past and let charges
+    ///     fire back-to-back until it caught up — batch collection, forbidden.
+    ///
+    /// Deliberately no "too early" check: NotDue lives in the Executor (per
+    /// the frozen catalog), and markPaid is Executor-only anyway.
+    function markPaid(uint256 subId) external {
+        if (msg.sender != executor) revert NotExecutor();
+
+        Subscription storage sub = subscriptions[subId];
+        if (!sub.active) revert SubscriptionNotActive();
+
+        uint256 interval = plans[sub.planId].interval;
+        uint256 due = sub.nextPaymentDue;
+
+        if (block.timestamp >= due + interval) {
+            sub.nextPaymentDue = block.timestamp + interval;
+        } else {
+            sub.nextPaymentDue = due + interval;
+        }
+
+        emit PaymentRecorded(subId, sub.nextPaymentDue);
+    }
+
+    /// The scheduler's question, answered on-chain so due-ness logic lives in
+    /// exactly one place. False for nonexistent ids (both actives default false),
+    /// cancelled subs, deactivated plans, and not-yet-due schedules. Never
+    /// reverts — the scheduler filters with it, it doesn't act on it.
+    function isDue(uint256 subId) external view returns (bool) {
+        Subscription storage sub = subscriptions[subId];
+        return sub.active && plans[sub.planId].active && block.timestamp >= sub.nextPaymentDue;
+    }
+
+    /// Full id list in one call (cancelled subs included — it's history).
+    /// The subscriberSubs auto-getter only serves one index at a time and
+    /// exposes no length, so the backend couldn't enumerate without this.
+    function getSubscriberSubs(address subscriber) external view returns (uint256[] memory) {
+        return subscriberSubs[subscriber];
+    }
 }
