@@ -39,6 +39,8 @@ contract SubscriptionRegistry {
     error PlanNotActive(); // plan nonexistent or already deactivated
     error AlreadySubscribed(); // double-subscribe to same plan
     error NotPlanMerchant(); // deactivatePlan by anyone but the plan's merchant
+    error NotSubscriber(); // unsubscribe by anyone but the subscription's owner
+    error SubscriptionNotActive(); // acting on a nonexistent or cancelled subscription
 
     /// Merchant entry point. Whoever calls this becomes the plan's merchant —
     /// there's no merchant registration step; the plan IS the registration.
@@ -114,5 +116,24 @@ contract SubscriptionRegistry {
         emit Subscribed(subId, msg.sender, planId);
     }
 
-    // TODO: implement unsubscribe, recordPayment (markPaid), view helpers
+    /// Subscriber cancel, anytime, no merchant approval. Stops future charges
+    /// (Executor checks sub.active); escrow stays withdrawable in the Vault.
+    /// Moves no money — the Registry never touches tokens.
+    function unsubscribe(uint256 subId) external {
+        Subscription storage sub = subscriptions[subId];
+
+        // State first, authority second — same reasoning as deactivatePlan:
+        // a nonexistent sub has subscriber == address(0).
+        if (!sub.active) revert SubscriptionNotActive();
+        if (msg.sender != sub.subscriber) revert NotSubscriber();
+
+        sub.active = false;
+        // Reopen the door: they can subscribe to this plan again later.
+        // The old sub stays in subscriberSubs as history (append-only).
+        hasActiveSubscription[msg.sender][sub.planId] = false;
+
+        emit Unsubscribed(subId);
+    }
+
+    // TODO: implement recordPayment (markPaid), view helpers
 }
