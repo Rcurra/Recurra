@@ -56,7 +56,7 @@ export default function LoginPage() {
               Welcome to Recurra
             </p>
             <h1 className="text-xl font-semibold text-ink">Sign in with email</h1>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-muted">
+            <p className="numeric mt-2 text-[11.5px] leading-relaxed tracking-[0.06em] text-ink-muted">
               One email. One signature, later.
               <br />
               Payments run themselves after that.
