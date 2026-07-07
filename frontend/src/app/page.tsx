@@ -87,15 +87,16 @@ export default function LandingPage() {
           />
         ))}
 
-        {/* little planets — tiny, faint, drifting at the edges */}
+        {/* little planets — lit spheres, not discs: upper-left highlight,
+            crescent shadow lower-right, the odd surface band or ring */}
         {(
           [
-            { left: '9%', top: '18%', size: 10, color: T.violetLight, ring: true, dur: 22 },
-            { left: '86%', top: '13%', size: 7, color: T.mint, ring: false, dur: 26 },
-            { left: '78%', top: '72%', size: 12, color: T.violet, ring: true, dur: 30 },
-            { left: '14%', top: '76%', size: 6, color: T.text, ring: false, dur: 24 },
-            { left: '68%', top: '32%', size: 5, color: T.mint, ring: false, dur: 28 },
-            { left: '28%', top: '38%', size: 8, color: T.violetLight, ring: false, dur: 34 },
+            { left: '9%', top: '18%', size: 10, color: T.violetLight, ring: true, band: false, dur: 22 },
+            { left: '86%', top: '13%', size: 7, color: T.mint, ring: false, band: true, dur: 26 },
+            { left: '78%', top: '72%', size: 12, color: T.violet, ring: true, band: false, dur: 30 },
+            { left: '14%', top: '76%', size: 6, color: T.text, ring: false, band: false, dur: 24 },
+            { left: '68%', top: '32%', size: 5, color: T.mint, ring: false, band: false, dur: 28 },
+            { left: '28%', top: '38%', size: 8, color: T.violetLight, ring: false, band: true, dur: 34 },
           ] as const
         ).map((p, i) => (
           <svg
@@ -110,20 +111,42 @@ export default function LandingPage() {
               animation: `drift ${p.dur}s ease-in-out infinite ${i * 1.7}s, planetGlow ${6 + (i % 3) * 2}s ease-in-out infinite ${i * 0.9}s`,
             }}
           >
-            <circle cx="20" cy="20" r="7" fill={p.color} opacity="0.5" />
-            <circle cx="20" cy="20" r="7" fill="none" stroke={p.color} strokeWidth="0.75" opacity="0.9" />
-            {p.ring && (
-              <ellipse
-                cx="20"
-                cy="20"
-                rx="13"
-                ry="4.5"
+            <defs>
+              <radialGradient id={`p-light-${i}`} cx="34%" cy="30%" r="70%">
+                <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
+                <stop offset="45%" stopColor="#FFFFFF" stopOpacity="0.1" />
+                <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+              </radialGradient>
+              <clipPath id={`p-clip-${i}`}>
+                <circle cx="20" cy="20" r="7" />
+              </clipPath>
+            </defs>
+
+            {/* body */}
+            <circle cx="20" cy="20" r="7" fill={p.color} opacity="0.75" />
+            {/* sunlit side */}
+            <circle cx="20" cy="20" r="7" fill={`url(#p-light-${i})`} />
+            {/* surface band (latitude stripe) */}
+            {p.band && (
+              <path
+                d="M13.2 18.4 Q20 21.8 26.8 18.1"
                 fill="none"
-                stroke={p.color}
-                strokeWidth="0.75"
-                opacity="0.6"
-                transform="rotate(-18 20 20)"
+                stroke="#06070B"
+                strokeWidth="1.1"
+                opacity="0.35"
+                clipPath={`url(#p-clip-${i})`}
               />
+            )}
+            {/* night side — offset dark sphere clipped to the body = crescent */}
+            <circle cx="23.4" cy="23.2" r="7.4" fill="#06070B" opacity="0.6" clipPath={`url(#p-clip-${i})`} />
+            {/* limb */}
+            <circle cx="20" cy="20" r="7" fill="none" stroke={p.color} strokeWidth="0.6" opacity="0.7" />
+
+            {p.ring && (
+              <g transform="rotate(-18 20 20)">
+                <ellipse cx="20" cy="20" rx="12.5" ry="4.2" fill="none" stroke={p.color} strokeWidth="0.75" opacity="0.55" />
+                <ellipse cx="20" cy="20" rx="10.5" ry="3.4" fill="none" stroke={p.color} strokeWidth="0.4" opacity="0.3" />
+              </g>
             )}
           </svg>
         ))}
