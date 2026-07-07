@@ -34,10 +34,32 @@
   --font-mono: var(--font-app-mono);
 }
 
+:root {
+  /* tell the browser this is a dark page, so its own UI (autofill
+     dropdowns, scrollbars, form controls) renders dark too */
+  color-scheme: dark;
+}
+
 body {
   background: var(--canvas);
   color: var(--ink);
   font-family: var(--font-app-sans), system-ui, sans-serif;
+}
+
+/* Browser autofill paints inputs with its own pale background; paint it
+   back. The huge inset shadow covers the fill, the long transition stops
+   the flash, and text-fill keeps our ink color. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--ink);
+  transition: background-color 999999s ease-in-out 0s;
+}
+input:autofill {
+  box-shadow: 0 0 0 1000px var(--surface) inset;
 }
 
 /* Numbers are always monospace — amounts, dates, addresses. */
