@@ -64,6 +64,7 @@ export default function LandingPage() {
       <style>{`
         @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
+        @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(6px,-10px); } }
       `}</style>
 
       {/* starfield — the only atmosphere */}
@@ -83,6 +84,48 @@ export default function LandingPage() {
               animation: `starTwinkle ${3 + (i % 4)}s ease-in-out infinite ${i * 0.2}s`,
             }}
           />
+        ))}
+
+        {/* little planets — tiny, faint, drifting at the edges */}
+        {(
+          [
+            { left: '9%', top: '18%', size: 10, color: T.violetLight, ring: true, dur: 22 },
+            { left: '86%', top: '13%', size: 7, color: T.mint, ring: false, dur: 26 },
+            { left: '78%', top: '72%', size: 12, color: T.violet, ring: true, dur: 30 },
+            { left: '14%', top: '76%', size: 6, color: T.text, ring: false, dur: 24 },
+            { left: '68%', top: '32%', size: 5, color: T.mint, ring: false, dur: 28 },
+            { left: '28%', top: '38%', size: 8, color: T.violetLight, ring: false, dur: 34 },
+          ] as const
+        ).map((p, i) => (
+          <svg
+            key={i}
+            width={p.size * 4}
+            height={p.size * 4}
+            viewBox="0 0 40 40"
+            style={{
+              position: 'absolute',
+              left: p.left,
+              top: p.top,
+              opacity: 0.35,
+              animation: `drift ${p.dur}s ease-in-out infinite ${i * 1.7}s`,
+            }}
+          >
+            <circle cx="20" cy="20" r="7" fill={p.color} opacity="0.5" />
+            <circle cx="20" cy="20" r="7" fill="none" stroke={p.color} strokeWidth="0.75" opacity="0.9" />
+            {p.ring && (
+              <ellipse
+                cx="20"
+                cy="20"
+                rx="13"
+                ry="4.5"
+                fill="none"
+                stroke={p.color}
+                strokeWidth="0.75"
+                opacity="0.6"
+                transform="rotate(-18 20 20)"
+              />
+            )}
+          </svg>
         ))}
       </div>
 
