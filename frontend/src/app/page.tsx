@@ -66,6 +66,7 @@ export default function LandingPage() {
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
         @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } }
         @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
+        @keyframes planetWave { 0% { transform: scale(1); opacity: 0.45; } 55% { transform: scale(2.5); opacity: 0; } 100% { transform: scale(2.5); opacity: 0; } }
       `}</style>
 
       {/* starfield — the only atmosphere */}
@@ -122,6 +123,20 @@ export default function LandingPage() {
               </clipPath>
             </defs>
 
+            {/* the ping — an expanding ripple reaching past the sphere */}
+            <circle
+              cx="20"
+              cy="20"
+              r="7"
+              fill="none"
+              stroke={p.color}
+              strokeWidth="0.6"
+              style={{
+                transformBox: 'fill-box',
+                transformOrigin: 'center',
+                animation: `planetWave ${9 + (i % 3) * 4}s ease-out infinite ${i * 1.9}s`,
+              }}
+            />
             {/* body */}
             <circle cx="20" cy="20" r="7" fill={p.color} opacity="0.75" />
             {/* sunlit side */}
