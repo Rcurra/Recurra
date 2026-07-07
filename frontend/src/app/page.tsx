@@ -2,24 +2,25 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginWithEmail, getMagic } from '@/features/auth';
-import { createUniversalAccount } from '@/lib/particle';
+import { loginWithEmail } from '@/features/auth';
 
+// Login = Magic email OTP, nothing else. Zero signatures — browsing is free;
+// the 7702 upgrade + session key happen lazily at first subscribe (F4).
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   async function handleLogin() {
     setLoading(true);
+    setError(null);
     try {
-      await loginWithEmail(email);
-      const magicProvider = await getMagic().wallet.getProvider();
-      const { address } = await createUniversalAccount(magicProvider);
-      localStorage.setItem('ua_address', address);
+      const address = await loginWithEmail(email);
+      localStorage.setItem('recurra_address', address);
       router.push('/dashboard');
     } catch (err) {
-      console.error(err);
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -28,7 +29,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8">
       <h1 className="text-2xl font-bold mb-2">Recurra</h1>
-      <p className="text-zinc-500 mb-8 text-sm">Fund once. Approve once. Pay forever.</p>
+      <p className="text-zinc-500 mb-8 text-sm">Set it. Forget it. Own it.</p>
       <input
         type="email"
         placeholder="Enter your email"
@@ -38,11 +39,12 @@ export default function LoginPage() {
       />
       <button
         onClick={handleLogin}
-        disabled={loading}
+        disabled={loading || !email}
         className="bg-blue-600 text-white px-6 py-2 rounded disabled:opacity-50"
       >
-        {loading ? 'Sending link...' : 'Login with Magic'}
+        {loading ? 'Checking your email…' : 'Continue with email'}
       </button>
+      {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
     </main>
   );
 }

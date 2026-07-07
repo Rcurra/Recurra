@@ -1,4 +1,4 @@
 // Auth feature barrel — re-exports everything consumers need.
-// Keep heavy SDK imports inside the individual modules so they're tree-shaken.
-export { getMagic, loginWithEmail, logout } from '@/lib/magic';
-export { createUniversalAccount } from '@/lib/particle';
+// Login is Magic ONLY (email OTP → EOA). The Particle UA is NOT part of
+// auth — it appears solely inside the fund step (F6, flag-gated).
+export { loginWithEmail, restoreSession, logout } from '@/lib/magic';

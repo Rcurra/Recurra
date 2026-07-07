@@ -9,12 +9,12 @@ export default function DashboardPage() {
   const [address, setAddress] = useState<string | null>(null);
 
   useEffect(() => {
-    const addr = localStorage.getItem('ua_address');
+    const addr = localStorage.getItem('recurra_address');
     if (!addr) { router.push('/'); return; }
     setAddress(addr);
   }, [router]);
 
-  const { subscriptions, loading, error, cancel } = useSubscriptions(address);
+  const { subscriptions, loading, error } = useSubscriptions(address);
 
   if (loading) return <p className="p-8">Loading...</p>;
   if (error) return <p className="p-8 text-red-500">{error}</p>;
@@ -31,15 +31,10 @@ export default function DashboardPage() {
               <div>
                 <p className="font-medium">Plan #{sub.planId}</p>
                 <p className="text-sm text-zinc-500">
-                  Next payment: {new Date(sub.nextPaymentDue).toLocaleDateString()}
+                  Next payment: {sub.nextPaymentDue.toLocaleDateString()}
                 </p>
               </div>
-              <button
-                onClick={() => cancel(sub.id)}
-                className="text-red-500 text-sm hover:underline"
-              >
-                Cancel
-              </button>
+              <span className="text-sm text-zinc-400">{sub.active ? 'Active' : 'Cancelled'}</span>
             </li>
           ))}
         </ul>
