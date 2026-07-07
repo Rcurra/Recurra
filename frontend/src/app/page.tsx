@@ -204,14 +204,14 @@ export default function LandingPage() {
         <h1
           style={{
             fontFamily: 'var(--font-display), sans-serif',
-            fontSize: 'clamp(44px, 7.5vw, 96px)',
+            fontSize: 'clamp(38px, 6vw, 76px)',
             fontWeight: 400,
             lineHeight: 1.0,
             letterSpacing: '0.01em',
             textTransform: 'uppercase',
             margin: 0,
             maxWidth: 880,
-            color: T.text,
+            color: '#C9CEDA',
             animation: 'fadeUp 1s ease both 0.15s',
           }}
         >
