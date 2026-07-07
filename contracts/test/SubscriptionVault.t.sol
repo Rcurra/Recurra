@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {SubscriptionVault} from "../src/SubscriptionVault.sol";
 import {ExecutorWired} from "../src/ExecutorWired.sol";
 import {MockUSDC} from "../script/MockUSDC.sol";
@@ -22,7 +23,7 @@ contract ReentrantToken {
     SubscriptionVault public vault;
     Attack public attack;
 
-    function setUp(SubscriptionVault vault_, Attack attack_) external {
+    function arm(SubscriptionVault vault_, Attack attack_) external {
         vault = vault_;
         attack = attack_;
     }
@@ -96,7 +97,9 @@ contract SubscriptionVaultTest is Test {
     function test_deposit_revertsWithoutApproval() public {
         usdc.mint(bob, FUND); // bob never approved the vault
         vm.prank(bob);
-        vm.expectRevert(); // ERC20InsufficientAllowance from the token
+        vm.expectRevert(
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(vault), 0, FUND)
+        );
         vault.deposit(address(usdc), FUND);
         assertEq(vault.balances(bob, address(usdc)), 0, "no credit without tokens");
     }
@@ -232,7 +235,7 @@ contract SubscriptionVaultTest is Test {
 
     function test_reentrancy_blockedDuringDeposit() public {
         ReentrantToken evil = new ReentrantToken();
-        evil.setUp(vault, ReentrantToken.Attack.OnTransferFrom);
+        evil.arm(vault, ReentrantToken.Attack.OnTransferFrom);
 
         vm.prank(alice);
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
@@ -241,11 +244,11 @@ contract SubscriptionVaultTest is Test {
 
     function test_reentrancy_blockedDuringWithdraw() public {
         ReentrantToken evil = new ReentrantToken();
-        evil.setUp(vault, ReentrantToken.Attack.None);
+        evil.arm(vault, ReentrantToken.Attack.None);
         vm.prank(alice);
         vault.deposit(address(evil), 100); // clean deposit first
 
-        evil.setUp(vault, ReentrantToken.Attack.OnTransfer);
+        evil.arm(vault, ReentrantToken.Attack.OnTransfer);
         vm.prank(alice);
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         vault.withdraw(address(evil), 50);
@@ -255,11 +258,11 @@ contract SubscriptionVaultTest is Test {
 
     function test_reentrancy_blockedDuringDebit() public {
         ReentrantToken evil = new ReentrantToken();
-        evil.setUp(vault, ReentrantToken.Attack.None);
+        evil.arm(vault, ReentrantToken.Attack.None);
         vm.prank(alice);
         vault.deposit(address(evil), 100);
 
-        evil.setUp(vault, ReentrantToken.Attack.OnTransfer);
+        evil.arm(vault, ReentrantToken.Attack.OnTransfer);
         vm.prank(executor);
         vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
         vault.debit(alice, address(evil), 10, merchant);
