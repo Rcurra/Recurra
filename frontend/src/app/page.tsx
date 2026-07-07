@@ -66,7 +66,7 @@ export default function LandingPage() {
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
         @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } }
         @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
-        @keyframes planetWave { 0% { transform: scale(1); opacity: 0.4; } 55% { transform: scale(1.9); opacity: 0; } 100% { transform: scale(1.9); opacity: 0; } }
+        @keyframes planetWave { 0% { transform: scale(1); opacity: 0.38; } 65% { transform: scale(2.6); opacity: 0; } 100% { transform: scale(2.6); opacity: 0; } }
       `}</style>
 
       {/* starfield — the only atmosphere */}
@@ -109,6 +109,7 @@ export default function LandingPage() {
               position: 'absolute',
               left: p.left,
               top: p.top,
+              overflow: 'visible',
               animation: `drift ${p.dur}s ease-in-out infinite ${i * 1.7}s, planetGlow ${6 + (i % 3) * 2}s ease-in-out infinite ${i * 0.9}s`,
             }}
           >
