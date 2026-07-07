@@ -272,21 +272,6 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <div
-        className="numeric"
-        style={{
-          position: 'absolute',
-          bottom: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          fontSize: 10,
-          color: T.faint,
-          letterSpacing: '0.2em',
-          zIndex: 10,
-        }}
-      >
-        SCROLL TO EXPLORE
-      </div>
     </div>
   );
 }
