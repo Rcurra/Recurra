@@ -27,6 +27,7 @@ contract SubscriptionVault is Ownable, ReentrancyGuard {
     event Withdrawn(address indexed subscriber, address indexed token, uint256 amount);
 
     error ZeroAmount(); // deposit/withdraw/debit of 0
+    error InsufficientBalance(); // withdraw/debit exceeds escrowed balance
 
     constructor() Ownable(msg.sender) {}
 
@@ -52,5 +53,30 @@ contract SubscriptionVault is Ownable, ReentrancyGuard {
         emit Deposited(msg.sender, token, amount);
     }
 
-    // TODO: withdraw (commit 2), setExecutor + debit (commit 3)
+    /// Take escrow back — anytime, all of it if wanted. The only checks are
+    /// arithmetic; deliberately NO policy checks (invariant #3): not "are you
+    /// subscribed", no notice period, no pause switch. Uncommitted balance is
+    /// the subscriber's, instantly — that's the bounded-loss pitch in code.
+    /// An emptied vault simply makes future charges revert
+    /// InsufficientVaultBalance in the Executor (a paused subscription).
+    ///
+    /// Outbound flow: ledger debited BEFORE the transfer (CEI), so any
+    /// re-entering call already sees the reduced balance — and nonReentrant
+    /// refuses the re-entry regardless.
+    function withdraw(address token, uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+
+        uint256 balance = balances[msg.sender][token];
+        if (balance < amount) revert InsufficientBalance();
+
+        // unchecked: can't underflow, checked against balance above.
+        unchecked {
+            balances[msg.sender][token] = balance - amount;
+        }
+        IERC20(token).safeTransfer(msg.sender, amount);
+
+        emit Withdrawn(msg.sender, token, amount);
+    }
+
+    // TODO: setExecutor + debit (commit 3)
 }
