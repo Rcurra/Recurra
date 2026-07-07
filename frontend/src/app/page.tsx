@@ -36,11 +36,11 @@ const CHAINS = [
 ] as const;
 
 function HeroOrb() {
-  const size = 440;
+  const size = 360;
   const cx = size / 2,
     cy = size / 2,
-    coreR = 62,
-    orbitR = 165;
+    coreR = 52,
+    orbitR = 134;
   const [pulse, setPulse] = useState(false);
   useEffect(() => {
     const iv = setInterval(() => {
@@ -88,11 +88,11 @@ function HeroOrb() {
           opacity={0.6}
           style={{ transformOrigin: 'center', animation: 'spin 60s linear infinite' }}
         />
-        <circle cx={cx} cy={cy} r={orbitR - 34} fill="none" stroke={T.border} strokeWidth="1" opacity={0.85} />
+        <circle cx={cx} cy={cy} r={orbitR - 28} fill="none" stroke={T.border} strokeWidth="1" opacity={0.85} />
         <circle
           cx={cx}
           cy={cy}
-          r={orbitR + 30}
+          r={orbitR + 24}
           fill="none"
           stroke={T.border}
           strokeWidth="1"
@@ -136,7 +136,7 @@ function HeroOrb() {
         <circle
           cx={cx}
           cy={cy}
-          r={coreR + 26}
+          r={coreR + 22}
           fill="url(#coreGlow)"
           style={{ animation: 'breathe 4.5s ease-in-out infinite' }}
         />
@@ -178,7 +178,7 @@ function HeroOrb() {
         </div>
         <div
           className="numeric"
-          style={{ fontSize: 34, fontWeight: 600, color: T.text, letterSpacing: '-0.02em', lineHeight: 1 }}
+          style={{ fontSize: 30, fontWeight: 600, color: T.text, letterSpacing: '-0.02em', lineHeight: 1 }}
         >
           ∞
         </div>
@@ -230,7 +230,7 @@ function Nav({ onLaunch }: { onLaunch: () => void }) {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '18px 32px',
+        padding: '10px 28px',
         position: 'fixed',
         top: 0,
         left: 0,
@@ -257,7 +257,7 @@ function Nav({ onLaunch }: { onLaunch: () => void }) {
         <button
           onClick={onLaunch}
           style={{
-            padding: '9px 18px',
+            padding: '8px 16px',
             fontSize: 14,
             fontWeight: 600,
             background: T.launchBg,
@@ -292,7 +292,7 @@ export default function LandingPage() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes spinRev { to { transform: rotate(-360deg); } }
-        @keyframes wave { from { r: 62px; opacity: 0.7; } to { r: 190px; opacity: 0; } }
+        @keyframes wave { from { r: 52px; opacity: 0.7; } to { r: 156px; opacity: 0; } }
         @keyframes flow { to { stroke-dashoffset: -12; } }
         @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
         @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
@@ -337,7 +337,7 @@ export default function LandingPage() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: '100px 24px 60px',
+          padding: '72px 24px 48px',
           textAlign: 'center',
         }}
       >
@@ -349,7 +349,7 @@ export default function LandingPage() {
             gap: 8,
             padding: '6px 14px',
             borderRadius: 20,
-            marginBottom: 40,
+            marginBottom: 22,
             border: `1px solid ${T.border}`,
             background: T.card,
             fontSize: 12,
@@ -376,11 +376,11 @@ export default function LandingPage() {
 
         <h1
           style={{
-            fontSize: 'clamp(38px, 6vw, 72px)',
+            fontSize: 'clamp(32px, 5vw, 58px)',
             fontWeight: 700,
             lineHeight: 1.02,
             letterSpacing: '-0.03em',
-            margin: '20px 0 0',
+            margin: '14px 0 0',
             maxWidth: 780,
             animation: 'fadeUp 1s ease both 0.2s',
           }}
@@ -390,10 +390,10 @@ export default function LandingPage() {
 
         <p
           style={{
-            fontSize: 18,
+            fontSize: 16.5,
             color: T.dim,
             maxWidth: 520,
-            margin: '22px 0 0',
+            margin: '14px 0 0',
             lineHeight: 1.55,
             animation: 'fadeUp 1s ease both 0.3s',
           }}
@@ -401,11 +401,11 @@ export default function LandingPage() {
           Fund once. Approve once. Pay forever — across any chain, on any schedule, without ever signing again.
         </p>
 
-        <div style={{ display: 'flex', gap: 12, marginTop: 36, animation: 'fadeUp 1s ease both 0.4s' }}>
+        <div style={{ display: 'flex', gap: 12, marginTop: 26, animation: 'fadeUp 1s ease both 0.4s' }}>
           <button
             onClick={launch}
             style={{
-              padding: '14px 28px',
+              padding: '12px 24px',
               fontSize: 15,
               fontWeight: 600,
               background: T.mint,
@@ -421,7 +421,7 @@ export default function LandingPage() {
           </button>
           <button
             style={{
-              padding: '14px 28px',
+              padding: '12px 24px',
               fontSize: 15,
               fontWeight: 600,
               background: 'transparent',
@@ -442,8 +442,8 @@ export default function LandingPage() {
         <div
           style={{
             display: 'flex',
-            gap: 28,
-            marginTop: 60,
+            gap: 26,
+            marginTop: 36,
             flexWrap: 'wrap',
             justifyContent: 'center',
             animation: 'fadeUp 1s ease both 0.5s',
