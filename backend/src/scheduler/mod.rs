@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use chrono::Utc;
 use tokio::time;
 
 use crate::chain::AppState;
@@ -22,14 +21,11 @@ pub async fn run(state: AppState) {
 }
 
 async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
-    // 1. Read all subscriptions, keep the active ones whose next payment is due.
-    let now = Utc::now();
-    let due: Vec<_> = state
-        .fetch_all_subscriptions()
-        .await?
-        .into_iter()
-        .filter(|s| s.active && s.next_payment_due <= now)
-        .collect();
+    // 1. Ask the registry which subscriptions are due. Due-ness is decided
+    //    on-chain via `isDue(subId)` (single source of truth) rather than an
+    //    off-chain timestamp compare, so scheduler clock drift can never make us
+    //    charge early or miss a cycle.
+    let due = state.fetch_due_subscriptions().await?;
 
     if due.is_empty() {
         tracing::info!("no subscriptions due this tick");
@@ -41,9 +37,11 @@ async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
     // 2. For each due subscription we would build calldata for
     //    PaymentExecutor.executePayment(subId) and submit it via
     //    state.openfort.send_transaction(...). Both are blocked until
-    //    PaymentExecutor.executePayment exists on-chain and is bound in
+    //    PaymentExecutor is rewritten to the frozen M0 interface and bound in
     //    chain::bindings. A failure on one subscription must not abort the
-    //    batch, so this loop will `continue` past per-payment errors then.
+    //    batch, so this loop will `continue` past per-payment errors then,
+    //    triaging the decoded revert (NotDue = benign race, skip;
+    //    SubscriptionInactive = skip; InsufficientVaultBalance = warn).
     for sub in due {
         tracing::info!(
             sub_id = sub.id,

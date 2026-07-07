@@ -1,14 +1,14 @@
 use alloy::primitives::Address;
 use axum::{
-    extract::{Path, Query, State},
     Json,
+    extract::{Path, Query, State},
 };
 use serde::Deserialize;
 
 use crate::{
     chain::AppState,
     errors::AppError,
-    models::{CreateSubscriptionRequest, Subscription},
+    models::{Plan, Subscription},
 };
 
 /// Optional `?subscriber=0x...` filter for `GET /subscriptions`.
@@ -19,23 +19,22 @@ pub struct ListQuery {
 
 /// `GET /subscriptions` — list subscriptions from the registry.
 ///
-/// With no query params this returns every subscription. With
-/// `?subscriber=0x...` it returns just that address's subscriptions (what the
-/// dashboard uses).
+/// With no query params this returns every subscription (walks all ids). With
+/// `?subscriber=0x...` — what the dashboard uses — it asks the registry for that
+/// address's id set directly, so the common path doesn't scan the whole registry.
 pub async fn list(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Subscription>>, AppError> {
-    let mut subs = state.fetch_all_subscriptions().await?;
-
-    if let Some(raw) = query.subscriber {
-        // Validate + normalise to checksummed form so string comparison is exact.
-        let wanted = raw
-            .parse::<Address>()
-            .map_err(|_| AppError::BadRequest(format!("invalid subscriber address: {raw}")))?
-            .to_checksum(None);
-        subs.retain(|s| s.subscriber == wanted);
-    }
+    let subs = match query.subscriber {
+        Some(raw) => {
+            let subscriber = raw
+                .parse::<Address>()
+                .map_err(|_| AppError::BadRequest(format!("invalid subscriber address: {raw}")))?;
+            state.fetch_subscriptions_for(subscriber).await?
+        }
+        None => state.fetch_all_subscriptions().await?,
+    };
 
     Ok(Json(subs))
 }
@@ -51,37 +50,26 @@ pub async fn get_one(
     }
 }
 
-/// `POST /subscriptions` — blocked on contracts.
-///
-/// Per the README flow the on-chain `subscribe()` is signed by the user's
-/// session key client-side; the backend's job here is registering that session
-/// key with `PaymentExecutor.registerSessionKey` — which isn't implemented
-/// on-chain yet. So this returns 501 rather than pretending to succeed.
-pub async fn create(
+/// `GET /plans` — list every plan the registry has ever had.
+pub async fn list_plans(State(state): State<AppState>) -> Result<Json<Vec<Plan>>, AppError> {
+    Ok(Json(state.fetch_all_plans().await?))
+}
+
+/// `GET /plans/{id}` — fetch one plan, 404 if it doesn't exist.
+pub async fn get_plan(
     State(state): State<AppState>,
-    Json(body): Json<CreateSubscriptionRequest>,
-) -> Result<Json<Subscription>, AppError> {
-    // Validate the addresses now so this is ready the moment the contract lands.
-    body.subscriber
-        .parse::<Address>()
-        .map_err(|_| AppError::BadRequest(format!("invalid subscriber address: {}", body.subscriber)))?;
-    body.session_key
-        .parse::<Address>()
-        .map_err(|_| AppError::BadRequest(format!("invalid session_key address: {}", body.session_key)))?;
-
-    let _ = state;
-    Err(AppError::NotImplemented(
-        "create blocked on PaymentExecutor.registerSessionKey (not deployed)".into(),
-    ))
+    Path(id): Path<u64>,
+) -> Result<Json<Plan>, AppError> {
+    match state.fetch_plan(id).await? {
+        Some(plan) => Ok(Json(plan)),
+        None => Err(AppError::NotFound(format!("plan {id} not found"))),
+    }
 }
 
-/// `DELETE /subscriptions/{id}` — blocked on contracts.
-///
-/// Cancelling calls `SubscriptionRegistry.unsubscribe(id)`, which is still
-/// `TODO` in the Solidity. Returns 501 until it exists.
-pub async fn cancel(State(state): State<AppState>, Path(id): Path<u64>) -> Result<Json<()>, AppError> {
-    let _ = (state, id);
-    Err(AppError::NotImplemented(
-        "cancel blocked on SubscriptionRegistry.unsubscribe (not implemented)".into(),
-    ))
-}
+// NOTE: there is deliberately no `POST /subscriptions` or `DELETE
+// /subscriptions/{id}`. Per the M0 freeze both writes are user-authority and
+// signed client-side via ZeroDev (`subscribe`/`unsubscribe`): the backend has
+// no key to sign as the user and no DB to book-keep, so a proxy endpoint would
+// be a lie. The dashboard mutates by sending the user-signed tx itself and then
+// re-reading these GETs. Protocol-authority writes (`executePayment`) go through
+// the scheduler, never the API.
