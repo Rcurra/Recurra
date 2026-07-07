@@ -9,7 +9,7 @@ contract SubscriptionVaultTest is Test {
     address executor = address(0xBEEF);
 
     function setUp() public {
-        vault = new SubscriptionVault(executor);
+        vault = new SubscriptionVault();
     }
 
     // TODO: test_deposit, test_debitOnlyByExecutor, test_withdraw

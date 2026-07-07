@@ -14,7 +14,7 @@ contract PaymentExecutorTest is Test {
     function setUp() public {
         registry = new SubscriptionRegistry();
         executor = new PaymentExecutor(address(0), address(0)); // wired after deploy
-        vault = new SubscriptionVault(address(executor));
+        vault = new SubscriptionVault();
     }
 
     // TODO: test_executePayment_validSessionKey, test_executePayment_expiredKey, test_endToEnd

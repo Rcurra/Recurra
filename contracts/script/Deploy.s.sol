@@ -15,7 +15,7 @@ contract Deploy is Script {
 
         // executor address is set after PaymentExecutor deploys — vault holds the reference
         PaymentExecutor executor = new PaymentExecutor(address(registry), address(0));
-        SubscriptionVault vault = new SubscriptionVault(address(executor));
+        SubscriptionVault vault = new SubscriptionVault();
 
         // TODO: wire vault back into executor after deployment
 
