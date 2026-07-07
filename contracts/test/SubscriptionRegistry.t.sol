@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SubscriptionRegistry} from "../src/SubscriptionRegistry.sol";
+import {ExecutorWired} from "../src/ExecutorWired.sol";
 
 contract SubscriptionRegistryTest is Test {
     SubscriptionRegistry registry;
@@ -232,7 +233,7 @@ contract SubscriptionRegistryTest is Test {
         SubscriptionRegistry fresh = new SubscriptionRegistry();
 
         vm.expectEmit(false, false, false, true);
-        emit SubscriptionRegistry.ExecutorSet(executor);
+        emit ExecutorWired.ExecutorSet(executor);
 
         fresh.setExecutor(executor);
         assertEq(fresh.executor(), executor);
@@ -247,14 +248,14 @@ contract SubscriptionRegistryTest is Test {
 
     function test_setExecutor_revertsOnZeroAddress() public {
         SubscriptionRegistry fresh = new SubscriptionRegistry();
-        vm.expectRevert(SubscriptionRegistry.ZeroAddress.selector);
+        vm.expectRevert(ExecutorWired.ZeroAddress.selector);
         fresh.setExecutor(address(0));
     }
 
     function test_setExecutor_revertsOnSecondSet() public {
         SubscriptionRegistry fresh = new SubscriptionRegistry();
         fresh.setExecutor(executor);
-        vm.expectRevert(SubscriptionRegistry.ExecutorAlreadySet.selector);
+        vm.expectRevert(ExecutorWired.ExecutorAlreadySet.selector);
         fresh.setExecutor(bob);
     }
 
@@ -265,11 +266,11 @@ contract SubscriptionRegistryTest is Test {
         uint256 subId = _subscribe(alice, planId);
 
         // not even the owner (this test contract) may call it
-        vm.expectRevert(SubscriptionRegistry.NotExecutor.selector);
+        vm.expectRevert(ExecutorWired.NotExecutor.selector);
         registry.markPaid(subId);
 
         vm.prank(bob);
-        vm.expectRevert(SubscriptionRegistry.NotExecutor.selector);
+        vm.expectRevert(ExecutorWired.NotExecutor.selector);
         registry.markPaid(subId);
     }
 
