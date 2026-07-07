@@ -66,7 +66,7 @@ export default function LandingPage() {
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
         @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } }
         @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
-        @keyframes planetWave { 0% { transform: scale(1); opacity: 0.45; } 55% { transform: scale(2.5); opacity: 0; } 100% { transform: scale(2.5); opacity: 0; } }
+        @keyframes planetWave { 0% { transform: scale(1); opacity: 0.4; } 55% { transform: scale(1.9); opacity: 0; } 100% { transform: scale(1.9); opacity: 0; } }
       `}</style>
 
       {/* starfield — the only atmosphere */}
@@ -123,14 +123,16 @@ export default function LandingPage() {
               </clipPath>
             </defs>
 
-            {/* the ping — an expanding ripple reaching past the sphere */}
+            {/* atmosphere shell — a visible outer sphere; THIS is what pulses,
+                the planet body itself never moves */}
+            <circle cx="20" cy="20" r="9.5" fill="none" stroke={p.color} strokeWidth="0.5" opacity="0.22" />
             <circle
               cx="20"
               cy="20"
-              r="7"
+              r="9.5"
               fill="none"
               stroke={p.color}
-              strokeWidth="0.6"
+              strokeWidth="0.5"
               style={{
                 transformBox: 'fill-box',
                 transformOrigin: 'center',
