@@ -9,6 +9,11 @@ pub struct Config {
     /// Read once the vault's `balances()` is surfaced for dashboard/history.
     #[allow(dead_code)]
     pub vault_address: String,
+    /// The `PaymentExecutor` address the scheduler targets with
+    /// `executePayment`. Optional today: the executor contract is still a stub,
+    /// so this is unset until the M2 payment path lands. Becomes required then.
+    #[allow(dead_code)]
+    pub executor_address: Option<String>,
     /// How often the scheduler checks for due payments (seconds)
     pub scheduler_interval_secs: u64,
 }
@@ -24,6 +29,7 @@ impl Config {
             arbitrum_rpc: require("ARBITRUM_RPC"),
             registry_address: require("SUBSCRIPTION_REGISTRY_ADDRESS"),
             vault_address: require("SUBSCRIPTION_VAULT_ADDRESS"),
+            executor_address: env::var("EXECUTOR_ADDRESS").ok().filter(|s| !s.is_empty()),
             scheduler_interval_secs: env::var("SCHEDULER_INTERVAL_SECS")
                 .unwrap_or_else(|_| "60".into())
                 .parse()

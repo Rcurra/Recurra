@@ -1,4 +1,4 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde_json::json;
 use std::fmt;
 
@@ -6,9 +6,6 @@ use std::fmt;
 pub enum AppError {
     NotFound(String),
     BadRequest(String),
-    /// A handler/path the backend deliberately doesn't serve yet (blocked on a
-    /// contract that isn't deployed). Distinct from an unexpected internal error.
-    NotImplemented(String),
     /// A failure talking to the chain: RPC transport error or a contract revert.
     /// Surfaced as 502 because the fault is an upstream dependency, not the request.
     Chain(String),
@@ -20,7 +17,6 @@ impl fmt::Display for AppError {
         match self {
             AppError::NotFound(msg) => write!(f, "not found: {msg}"),
             AppError::BadRequest(msg) => write!(f, "bad request: {msg}"),
-            AppError::NotImplemented(msg) => write!(f, "not implemented: {msg}"),
             AppError::Chain(msg) => write!(f, "chain error: {msg}"),
             AppError::Internal(msg) => write!(f, "internal error: {msg}"),
         }
@@ -32,7 +28,6 @@ impl IntoResponse for AppError {
         let (status, message) = match self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::NotImplemented(msg) => (StatusCode::NOT_IMPLEMENTED, msg),
             AppError::Chain(msg) => (StatusCode::BAD_GATEWAY, msg),
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
