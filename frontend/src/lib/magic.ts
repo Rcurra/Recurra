@@ -1,26 +1,20 @@
-import { Magic } from 'magic-sdk';
+// Magic — email-OTP login → EOA. The ONLY file that may import magic-sdk.
+//
+// F1 implements: email OTP flow (magic-sdk + @magic-ext/evm for EIP-7702
+// signing support), EIP-1193 provider → viem WalletClient, session restore,
+// logout. Nothing Magic-specific leaks past this file.
+//
+// Dev bypass: NEXT_PUBLIC_DEV_WALLET=1 swaps this for a local anvil key so
+// the app runs offline with no Magic quota (see frontend/plan.md F1).
 
-let magic: Magic | null = null;
-
-export function getMagic(): Magic {
-  if (!magic && typeof window !== 'undefined') {
-    magic = new Magic(process.env.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY!, {
-      network: {
-        rpcUrl: process.env.NEXT_PUBLIC_ARBITRUM_RPC!,
-        chainId: 42161,
-      },
-    });
-  }
-  return magic!;
+export async function loginWithEmail(_email: string): Promise<string> {
+  throw new Error('lib/magic: implemented at F1');
 }
 
-export async function loginWithEmail(email: string): Promise<string> {
-  const m = getMagic();
-  await m.auth.loginWithMagicLink({ email });
-  const accounts = await m.wallet.connectWithUI();
-  return accounts[0];
+export async function restoreSession(): Promise<string | null> {
+  throw new Error('lib/magic: implemented at F1');
 }
 
-export async function logout() {
-  await getMagic().user.logout();
+export async function logout(): Promise<void> {
+  throw new Error('lib/magic: implemented at F1');
 }

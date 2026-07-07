@@ -1,20 +1,32 @@
-// ZeroDev session key helpers.
-// A session key lets the backend debit the user without asking them to sign
-// each time — it's scoped to a specific merchant, amount cap, and expiry.
+// ZeroDev — the smart-account layer. The ONLY file that may import
+// @zerodev/sdk / @zerodev/permissions.
+//
+// F4 implements:
+// - 7702 Kernel account from the Magic EOA (same address), lazily on first
+//   subscribe. Arbitrum's delegation slot belongs to Kernel, permanently.
+// - Session key at subscribe time, generated in the browser and scoped:
+//   callable contracts = vault + registry, spend cap = the user's funding
+//   amount, expiry = a few intervals. Validated by Kernel's permission
+//   modules AT THE ACCOUNT LAYER — session keys never touch our contracts
+//   (M0 decision; there is no on-chain registerSessionKey).
+// - One batched UserOp: subscribe + approve + deposit under ONE signature;
+//   ZeroDev paymaster sponsors gas.
+//
+// Until F4, features call the F3 signer abstraction (plain EOA writes on
+// anvil) behind the same interface — swapping it for Kernel must not touch
+// feature code.
 
-export interface SessionKeyParams {
-  merchantAddress: string;
+export interface SessionKeyScope {
   vaultAddress: string;
-  tokenAddress: string;
-  amountPerPeriod: bigint;
-  validUntil: Date;
+  registryAddress: string;
+  spendCap: bigint; // == the funding amount the user chose
+  expiresAt: Date;
 }
 
-// TODO (Day 13): implement using @zerodev/sdk + @zerodev/permissions
-// Returns the session key address that gets stored on-chain in PaymentExecutor.
-export async function createSessionKey(
-  _smartAccountClient: unknown,
-  _params: SessionKeyParams,
-): Promise<string> {
-  throw new Error('createSessionKey not yet implemented');
+export async function subscribeAndFund(
+  _planId: number,
+  _fundingAmount: bigint,
+  _scope: SessionKeyScope,
+): Promise<never> {
+  throw new Error('lib/zerodev: implemented at F4');
 }

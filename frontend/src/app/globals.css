@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
+/* Calm-finance tokens — dark only, by design (frontend/plan.md).
+   Every color in the app comes from here; components never hardcode. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #06070b; /* landing-matched near-black */
+  --surface: #0e1017; /* cards */
+  --surface-2: #14171f; /* hover / nested */
+  --line: #1a1d27; /* hairline borders */
+  --ink: #f2f3f7; /* primary text */
+  --ink-muted: #9aa3b2; /* secondary text */
+  --ink-faint: #565c6b; /* tertiary / labels */
+  --mint: #00e5a0; /* brand accent A — money, life, ok-ness */
+  --mint-deep: #06251b; /* mint-tinted dark fill */
+  --violet: #6c5ce7; /* brand accent B — the automated, the scheduled */
+  --violet-light: #8b7df0;
+  --danger: #f87171; /* errors only, never decoration */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-mint: var(--mint);
+  --color-mint-deep: var(--mint-deep);
+  --color-violet: var(--violet);
+  --color-violet-light: var(--violet-light);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-app-sans);
+  --font-mono: var(--font-app-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  /* tell the browser this is a dark page, so its own UI (autofill
+     dropdowns, scrollbars, form controls) renders dark too */
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-app-sans), system-ui, sans-serif;
+}
+
+/* Browser autofill paints inputs with its own pale background; paint it
+   back. The huge inset shadow covers the fill (important, because both the
+   UA style and the Tailwind focus-shadow utility fight for box-shadow),
+   the endless transition stops the white flash, and text-fill keeps our
+   ink color. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  -webkit-text-fill-color: var(--ink) !important;
+  caret-color: var(--ink) !important;
+  background-color: var(--surface) !important;
+  background-clip: content-box !important;
+  transition: background-color 999999s ease-in-out 0s !important;
+}
+input:autofill {
+  box-shadow: 0 0 0 1000px var(--surface) inset !important;
+}
+
+/* Numbers are always monospace — amounts, dates, addresses. */
+.numeric {
+  font-family: var(--font-app-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The breathing of the pulse — slow, subtle, alive. Used sparingly. */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.breathe {
+  animation: breathe 4.5s ease-in-out infinite;
 }
