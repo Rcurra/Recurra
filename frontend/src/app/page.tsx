@@ -1,65 +1,477 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { loginWithEmail } from '@/features/auth';
-import { CadenceRing } from '@/components/CadenceRing';
 
-// Login = Magic email OTP, nothing else. Zero signatures — browsing is free;
-// the 7702 upgrade + session key happen lazily at first subscribe (F4).
-export default function LoginPage() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+// ─────────────────────────────────────────────────────────────
+// Recurra — landing (theater; the app inside stays calm)
+// Dark only, like the product.
+// ─────────────────────────────────────────────────────────────
 
-  async function handleLogin() {
-    setLoading(true);
-    setError(null);
-    try {
-      const address = await loginWithEmail(email);
-      localStorage.setItem('recurra_address', address);
-      router.push('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setLoading(false);
-    }
-  }
+const T = {
+  bg: '#06070B',
+  card: '#0E1017',
+  cardGlass: 'rgba(14,16,23,0.7)',
+  border: '#1A1D27',
+  borderBright: '#282C39',
+  text: '#F2F3F7',
+  dim: '#8E94A3',
+  faint: '#565C6B',
+  mint: '#00E5A0',
+  violet: '#6C5CE7',
+  violetLight: '#8B7DF0',
+  coreFill: '#0A0C12',
+  ctaText: '#04140F',
+  launchBg: '#F2F3F7',
+  launchText: '#06070B',
+} as const;
+
+const CHAINS = [
+  { id: 'solana', color: '#14F195', angle: 90 },
+  { id: 'arbitrum', color: '#28A0F0', angle: 210 },
+  { id: 'base', color: '#3C7DFF', angle: 330 },
+  { id: 'polygon', color: '#A66DF5', angle: 30 },
+  { id: 'avalanche', color: '#E84142', angle: 150 },
+  { id: 'optimism', color: '#FF5C5C', angle: 270 },
+] as const;
+
+function HeroOrb() {
+  const size = 440;
+  const cx = size / 2,
+    cy = size / 2,
+    coreR = 62,
+    orbitR = 165;
+  const [pulse, setPulse] = useState(false);
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setPulse(true);
+      setTimeout(() => setPulse(false), 900);
+    }, 3400);
+    return () => clearInterval(iv);
+  }, []);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-canvas px-6">
-      <div className="flex w-full max-w-sm flex-col items-center">
-        <div className="breathe mb-8">
-          <CadenceRing progress={0.72} size={72} strokeWidth={3.5} />
+    <div style={{ position: 'relative', width: size, height: size, maxWidth: '90vw' }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        style={{ position: 'absolute', inset: 0, overflow: 'visible', maxWidth: '100%', height: 'auto' }}
+      >
+        <defs>
+          <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={T.mint} stopOpacity="0.9" />
+            <stop offset="45%" stopColor={T.violet} stopOpacity="0.55" />
+            <stop offset="100%" stopColor={T.violet} stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="ambientHalo" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor={T.violet} stopOpacity="0.16" />
+            <stop offset="60%" stopColor={T.violet} stopOpacity="0.03" />
+            <stop offset="100%" stopColor={T.violet} stopOpacity="0" />
+          </radialGradient>
+          <linearGradient id="orbitGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={T.mint} stopOpacity="0.65" />
+            <stop offset="100%" stopColor={T.violet} stopOpacity="0.65" />
+          </linearGradient>
+        </defs>
+
+        <circle cx={cx} cy={cy} r={size / 2} fill="url(#ambientHalo)" />
+
+        <circle
+          cx={cx}
+          cy={cy}
+          r={orbitR}
+          fill="none"
+          stroke="url(#orbitGrad)"
+          strokeWidth="1"
+          strokeDasharray="2 7"
+          opacity={0.6}
+          style={{ transformOrigin: 'center', animation: 'spin 60s linear infinite' }}
+        />
+        <circle cx={cx} cy={cy} r={orbitR - 34} fill="none" stroke={T.border} strokeWidth="1" opacity={0.85} />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={orbitR + 30}
+          fill="none"
+          stroke={T.border}
+          strokeWidth="1"
+          strokeDasharray="1 9"
+          opacity={0.6}
+          style={{ transformOrigin: 'center', animation: 'spinRev 90s linear infinite' }}
+        />
+
+        {CHAINS.map((ch, i) => {
+          const rad = (ch.angle * Math.PI) / 180;
+          const x = cx + Math.cos(rad) * orbitR,
+            y = cy + Math.sin(rad) * orbitR;
+          return (
+            <line
+              key={ch.id}
+              x1={x}
+              y1={y}
+              x2={cx}
+              y2={cy}
+              stroke={ch.color}
+              strokeWidth="1"
+              opacity={pulse ? 0.5 : 0.12}
+              strokeDasharray="2 4"
+              style={{ transition: 'opacity 0.5s', animation: `flow 1.4s linear infinite ${i * 0.2}s` }}
+            />
+          );
+        })}
+
+        {pulse && (
+          <circle
+            cx={cx}
+            cy={cy}
+            r={coreR}
+            fill="none"
+            stroke={T.mint}
+            strokeWidth="1.5"
+            style={{ animation: 'wave 0.9s ease-out forwards' }}
+          />
+        )}
+
+        <circle
+          cx={cx}
+          cy={cy}
+          r={coreR + 26}
+          fill="url(#coreGlow)"
+          style={{ animation: 'breathe 4.5s ease-in-out infinite' }}
+        />
+        <circle cx={cx} cy={cy} r={coreR} fill={T.coreFill} stroke="url(#orbitGrad)" strokeWidth="1.5" />
+        <circle cx={cx} cy={cy} r={coreR} fill="url(#coreGlow)" opacity={0.3} />
+
+        {CHAINS.map((ch) => {
+          const rad = (ch.angle * Math.PI) / 180;
+          const x = cx + Math.cos(rad) * orbitR,
+            y = cy + Math.sin(rad) * orbitR;
+          return (
+            <g key={ch.id} style={{ animation: 'bob 6s ease-in-out infinite' }}>
+              <circle cx={x} cy={y} r="15" fill={T.coreFill} stroke={ch.color} strokeWidth="1.5" />
+              <circle
+                cx={x}
+                cy={y}
+                r="4.5"
+                fill={ch.color}
+                style={{ filter: `drop-shadow(0 0 6px ${ch.color})` }}
+              />
+            </g>
+          );
+        })}
+      </svg>
+
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+        }}
+      >
+        <div className="numeric" style={{ fontSize: 10, letterSpacing: '0.24em', color: T.dim, marginBottom: 4 }}>
+          ONE BALANCE
+        </div>
+        <div
+          className="numeric"
+          style={{ fontSize: 34, fontWeight: 600, color: T.text, letterSpacing: '-0.02em', lineHeight: 1 }}
+        >
+          ∞
+        </div>
+        <div className="numeric" style={{ fontSize: 10, letterSpacing: '0.16em', color: T.mint, marginTop: 6 }}>
+          EVERY CHAIN
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Logo() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span
+        style={{
+          width: 24,
+          height: 24,
+          borderRadius: 7,
+          position: 'relative',
+          border: `1.5px solid ${T.mint}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <span
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: '50%',
+            border: `1.5px solid ${T.violet}`,
+            borderTopColor: 'transparent',
+            transform: 'rotate(45deg)',
+          }}
+        />
+      </span>
+      <span className="numeric" style={{ fontWeight: 600, fontSize: 15, letterSpacing: '0.12em', color: T.text }}>
+        RECURRA
+      </span>
+    </div>
+  );
+}
+
+function Nav({ onLaunch }: { onLaunch: () => void }) {
+  return (
+    <nav
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '18px 32px',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 20,
+        background: T.cardGlass,
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
+        borderBottom: `1px solid ${T.border}`,
+      }}
+    >
+      <Logo />
+      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+        {['How it works', 'Discover', 'Docs'].map((l) => (
+          <span
+            key={l}
+            style={{ fontSize: 14, color: T.dim, cursor: 'pointer', transition: 'color 0.2s' }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = T.text)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = T.dim)}
+          >
+            {l}
+          </span>
+        ))}
+        <button
+          onClick={onLaunch}
+          style={{
+            padding: '9px 18px',
+            fontSize: 14,
+            fontWeight: 600,
+            background: T.launchBg,
+            color: T.launchText,
+            border: 'none',
+            borderRadius: 9,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+          }}
+        >
+          Launch App
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+export default function LandingPage() {
+  const router = useRouter();
+  const launch = () => router.push('/login');
+
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: T.bg,
+        color: T.text,
+        overflow: 'hidden',
+        position: 'relative',
+      }}
+    >
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes spinRev { to { transform: rotate(-360deg); } }
+        @keyframes wave { from { r: 62px; opacity: 0.7; } to { r: 190px; opacity: 0; } }
+        @keyframes flow { to { stroke-dashoffset: -12; } }
+        @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
+      `}</style>
+
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        {Array.from({ length: 40 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              position: 'absolute',
+              left: `${(i * 37) % 100}%`,
+              top: `${(i * 53) % 100}%`,
+              width: 2,
+              height: 2,
+              borderRadius: '50%',
+              background: i % 3 === 0 ? T.mint : T.violetLight,
+              opacity: 0.3,
+              animation: `starTwinkle ${3 + (i % 4)}s ease-in-out infinite ${i * 0.2}s`,
+            }}
+          />
+        ))}
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: `radial-gradient(ellipse 80% 60% at 50% 40%, transparent, ${T.bg} 75%)`,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <Nav onLaunch={launch} />
+
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 10,
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '100px 24px 60px',
+          textAlign: 'center',
+        }}
+      >
+        <div
+          className="numeric"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 14px',
+            borderRadius: 20,
+            marginBottom: 40,
+            border: `1px solid ${T.border}`,
+            background: T.card,
+            fontSize: 12,
+            color: T.dim,
+            letterSpacing: '0.08em',
+            animation: 'fadeUp 0.8s ease both',
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: T.mint,
+              boxShadow: `0 0 8px ${T.mint}`,
+            }}
+          />
+          POWERED BY EIP-7702 · PARTICLE UNIVERSAL ACCOUNTS
         </div>
 
-        <h1 className="mb-2 text-2xl font-semibold tracking-[0.25em] text-ink">RECURRA</h1>
-        <p className="mb-12 text-sm text-ink-muted">Set it. Forget it. Own it.</p>
+        <div style={{ animation: 'fadeUp 1s ease both 0.1s' }}>
+          <HeroOrb />
+        </div>
 
-        <label htmlFor="email" className="mb-2 w-full text-xs uppercase tracking-wider text-ink-faint">
-          Email
-        </label>
-        <input
-          id="email"
-          type="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && email && handleLogin()}
-          className="mb-4 w-full rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-mint focus:outline-none"
-        />
-        <button
-          onClick={handleLogin}
-          disabled={loading || !email}
-          className="w-full rounded-lg bg-mint px-6 py-3 text-sm font-medium text-canvas transition hover:brightness-110 disabled:opacity-40"
+        <h1
+          style={{
+            fontSize: 'clamp(38px, 6vw, 72px)',
+            fontWeight: 700,
+            lineHeight: 1.02,
+            letterSpacing: '-0.03em',
+            margin: '20px 0 0',
+            maxWidth: 780,
+            animation: 'fadeUp 1s ease both 0.2s',
+          }}
         >
-          {loading ? 'Checking your email…' : 'Continue with email'}
-        </button>
+          Recurring payments, <span style={{ color: T.mint }}>finally invisible.</span>
+        </h1>
 
-        <p className="mt-6 text-xs text-ink-faint">No seed phrase. No downloads. Just your email.</p>
-        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+        <p
+          style={{
+            fontSize: 18,
+            color: T.dim,
+            maxWidth: 520,
+            margin: '22px 0 0',
+            lineHeight: 1.55,
+            animation: 'fadeUp 1s ease both 0.3s',
+          }}
+        >
+          Fund once. Approve once. Pay forever — across any chain, on any schedule, without ever signing again.
+        </p>
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 36, animation: 'fadeUp 1s ease both 0.4s' }}>
+          <button
+            onClick={launch}
+            style={{
+              padding: '14px 28px',
+              fontSize: 15,
+              fontWeight: 600,
+              background: T.mint,
+              color: T.ctaText,
+              border: 'none',
+              borderRadius: 11,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: `0 8px 30px -8px ${T.mint}`,
+            }}
+          >
+            Start subscribing →
+          </button>
+          <button
+            style={{
+              padding: '14px 28px',
+              fontSize: 15,
+              fontWeight: 600,
+              background: 'transparent',
+              color: T.text,
+              border: `1px solid ${T.borderBright}`,
+              borderRadius: 11,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span style={{ color: T.mint }}>▶</span> Watch demo
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 28,
+            marginTop: 60,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            animation: 'fadeUp 1s ease both 0.5s',
+          }}
+        >
+          {['Magic', 'ZeroDev', 'Openfort', 'Particle', 'Arbitrum'].map((n) => (
+            <span key={n} className="numeric" style={{ fontSize: 13, color: T.faint, letterSpacing: '0.06em' }}>
+              {n}
+            </span>
+          ))}
+        </div>
       </div>
-    </main>
+
+      <div
+        className="numeric"
+        style={{
+          position: 'absolute',
+          bottom: 24,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          fontSize: 11,
+          color: T.faint,
+          letterSpacing: '0.15em',
+          zIndex: 10,
+        }}
+      >
+        SCROLL TO EXPLORE
+      </div>
+    </div>
   );
 }

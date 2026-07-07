@@ -3,16 +3,17 @@
 /* Calm-finance tokens — dark only, by design (frontend/plan.md).
    Every color in the app comes from here; components never hardcode. */
 :root {
-  --canvas: #0a0d10; /* near-black, slightly blue */
-  --surface: #12161c; /* cards */
-  --surface-2: #171c23; /* hover / nested */
-  --line: #222a33; /* hairline borders */
-  --ink: #e8edf2; /* primary text */
-  --ink-muted: #8b98a5; /* secondary text */
-  --ink-faint: #5c6773; /* tertiary / labels */
-  --mint: #57e6b0; /* brand accent A — money, life, ok-ness */
-  --mint-deep: #0c2a1f; /* mint-tinted dark fill */
-  --violet: #a78bfa; /* brand accent B — the automated, the scheduled */
+  --canvas: #06070b; /* landing-matched near-black */
+  --surface: #0e1017; /* cards */
+  --surface-2: #14171f; /* hover / nested */
+  --line: #1a1d27; /* hairline borders */
+  --ink: #f2f3f7; /* primary text */
+  --ink-muted: #8e94a3; /* secondary text */
+  --ink-faint: #565c6b; /* tertiary / labels */
+  --mint: #00e5a0; /* brand accent A — money, life, ok-ness */
+  --mint-deep: #06251b; /* mint-tinted dark fill */
+  --violet: #6c5ce7; /* brand accent B — the automated, the scheduled */
+  --violet-light: #8b7df0;
   --danger: #f87171; /* errors only, never decoration */
 }
 
@@ -27,6 +28,7 @@
   --color-mint: var(--mint);
   --color-mint-deep: var(--mint-deep);
   --color-violet: var(--violet);
+  --color-violet-light: var(--violet-light);
   --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
