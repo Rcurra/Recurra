@@ -14,6 +14,8 @@ contract MockUSDC is ERC20 {
         return 6;
     }
 
+    // Unrestricted on purpose: local/testnet faucet. This token must never
+    // be pointed at by a real plan outside dev environments.
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
     }
