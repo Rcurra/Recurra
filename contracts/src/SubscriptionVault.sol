@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ExecutorWired} from "./ExecutorWired.sol";
 
 /// Holds subscriber funds in escrow — the custody, dumb by design. It knows
 /// no plans, no schedules, no "why": money leaves only via the Executor's
 /// debit() or back to its owner via withdraw(). If every other contract
 /// vanished, subscribers could still withdraw every cent.
-contract SubscriptionVault is Ownable, ReentrancyGuard {
+/// ExecutorWired supplies the one-time setExecutor wiring + onlyExecutor gate (debit).
+contract SubscriptionVault is ExecutorWired, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // subscriber → token → escrowed balance. The ledger: the actual tokens
@@ -18,31 +19,12 @@ contract SubscriptionVault is Ownable, ReentrancyGuard {
     // the auto-getter serves the backend's binding — do not rename.
     mapping(address => mapping(address => uint256)) public balances;
 
-    // The PaymentExecutor — the only address allowed to call debit().
-    // Wired once at deploy, then immutable in practice (same as Registry).
-    address public executor;
-
-    event ExecutorSet(address executor);
     event Deposited(address indexed subscriber, address indexed token, uint256 amount);
     event Debited(address indexed subscriber, address indexed token, uint256 amount, address recipient);
     event Withdrawn(address indexed subscriber, address indexed token, uint256 amount);
 
     error ZeroAmount(); // deposit/withdraw/debit of 0
     error InsufficientBalance(); // withdraw/debit exceeds escrowed balance
-    error NotExecutor(); // debit by anyone but the PaymentExecutor
-    error ExecutorAlreadySet(); // one-time wiring guard
-    error ZeroAddress(); // setExecutor(0) would brick debit forever
-
-    constructor() Ownable(msg.sender) {}
-
-    /// One-time deploy wiring, identical to the Registry's: points debit's
-    /// gate at the PaymentExecutor, then not even the owner can redirect it.
-    function setExecutor(address newExecutor) external onlyOwner {
-        if (newExecutor == address(0)) revert ZeroAddress();
-        if (executor != address(0)) revert ExecutorAlreadySet();
-        executor = newExecutor;
-        emit ExecutorSet(newExecutor);
-    }
 
     /// Escrow funds for future charges. Deposits are always to the caller's
     /// own balance — msg.sender on both sides, so there is no parameter to
@@ -99,8 +81,11 @@ contract SubscriptionVault is Ownable, ReentrancyGuard {
     /// guarantees exactly one thing: no Executor call, no debit.
     ///
     /// Outbound flow: same debit-then-transfer ordering as withdraw.
-    function debit(address subscriber, address token, uint256 amount, address merchant) external nonReentrant {
-        if (msg.sender != executor) revert NotExecutor();
+    function debit(address subscriber, address token, uint256 amount, address merchant)
+        external
+        nonReentrant
+        onlyExecutor
+    {
         if (amount == 0) revert ZeroAmount();
 
         uint256 balance = balances[subscriber][token];
