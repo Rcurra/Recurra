@@ -8,6 +8,11 @@ frontend/.env.local
 contracts/out/
 contracts/cache/
 
+# Foundry broadcast logs — local anvil (31337) and dry-runs are noise;
+# real-network runs (Sepolia at M3) stay committable as the deploy record
+contracts/broadcast/*/31337/
+contracts/broadcast/**/dry-run/
+
 # Rust build artifacts
 backend/target/
 
