@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
+/* Calm-finance tokens — dark only, by design (frontend/plan.md).
+   Every color in the app comes from here; components never hardcode. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --canvas: #0a0d10; /* near-black, slightly blue */
+  --surface: #12161c; /* cards */
+  --surface-2: #171c23; /* hover / nested */
+  --line: #222a33; /* hairline borders */
+  --ink: #e8edf2; /* primary text */
+  --ink-muted: #8b98a5; /* secondary text */
+  --ink-faint: #5c6773; /* tertiary / labels */
+  --mint: #57e6b0; /* brand accent A — money, life, ok-ness */
+  --mint-deep: #0c2a1f; /* mint-tinted dark fill */
+  --violet: #a78bfa; /* brand accent B — the automated, the scheduled */
+  --danger: #f87171; /* errors only, never decoration */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-mint: var(--mint);
+  --color-mint-deep: var(--mint-deep);
+  --color-violet: var(--violet);
+  --color-danger: var(--danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Numbers are always monospace — amounts, dates, addresses. */
+.numeric {
+  font-family: var(--font-geist-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The breathing of the pulse — slow, subtle, alive. Used sparingly. */
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.breathe {
+  animation: breathe 4.5s ease-in-out infinite;
 }
