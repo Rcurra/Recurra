@@ -1,4 +1,4 @@
-//! Typed contract bindings, g\nerated at compile time by alloy's `sol!` macro.
+//! Typed contract bindings, generated at compile time by alloy's `sol!` macro.
 //!
 //! We declare only the surface the backend actually touches, mirroring the
 //! Solidity in `contracts/src/*.sol`. Public state variables in Solidity get
