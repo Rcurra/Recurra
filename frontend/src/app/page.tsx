@@ -64,7 +64,8 @@ export default function LandingPage() {
       <style>{`
         @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
-        @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(6px,-10px); } }
+        @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } }
+        @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
       `}</style>
 
       {/* starfield — the only atmosphere */}
@@ -106,8 +107,7 @@ export default function LandingPage() {
               position: 'absolute',
               left: p.left,
               top: p.top,
-              opacity: 0.35,
-              animation: `drift ${p.dur}s ease-in-out infinite ${i * 1.7}s`,
+              animation: `drift ${p.dur}s ease-in-out infinite ${i * 1.7}s, planetGlow ${6 + (i % 3) * 2}s ease-in-out infinite ${i * 0.9}s`,
             }}
           >
             <circle cx="20" cy="20" r="7" fill={p.color} opacity="0.5" />
