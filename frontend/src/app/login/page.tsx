@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { loginWithEmail } from '@/features/auth';
-import { CadenceRing } from '@/components/CadenceRing';
+import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
 
 // Login = Magic email OTP, nothing else. Zero signatures — browsing is free;
@@ -34,9 +34,7 @@ export default function LoginPage() {
 
       {/* same nav as the landing: just the mark and the name */}
       <nav className="fixed top-[22px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5">
-        <span className="relative flex h-[26px] w-[26px] items-center justify-center rounded-lg border-[1.5px] border-mint">
-          <span className="h-2.5 w-2.5 rotate-45 rounded-full border-[1.5px] border-violet border-t-transparent" />
-        </span>
+        <RecurraMark size={28} />
         <span className="numeric text-sm font-semibold tracking-[0.16em] text-ink">RECURRA</span>
       </nav>
 
@@ -51,8 +49,8 @@ export default function LoginPage() {
           />
 
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="breathe mb-5">
-              <CadenceRing progress={0.72} size={52} strokeWidth={3} />
+            <div className="mb-5">
+              <RecurraMark size={64} spin />
             </div>
             <p className="numeric mb-2 text-[10px] uppercase tracking-[0.28em] text-ink-faint">
               Welcome to Recurra

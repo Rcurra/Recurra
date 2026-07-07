@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { RecurraMark } from '@/components/RecurraMark';
 
 // ─────────────────────────────────────────────────────────────
 // Recurra — landing. Typography is the hero, the starfield is the
@@ -21,30 +22,7 @@ const T = {
 } as const;
 
 function LogoMark() {
-  return (
-    <span
-      style={{
-        width: 26,
-        height: 26,
-        borderRadius: 8,
-        border: `1.5px solid ${T.mint}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <span
-        style={{
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          border: `1.5px solid ${T.violet}`,
-          borderTopColor: 'transparent',
-          transform: 'rotate(45deg)',
-        }}
-      />
-    </span>
-  );
+  return <RecurraMark size={28} />;
 }
 
 export default function LandingPage() {

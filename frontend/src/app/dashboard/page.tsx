@@ -7,14 +7,11 @@ import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { Ambient } from '@/components/Ambient';
+import { RecurraMark } from '@/components/RecurraMark';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeUntil } from '@/lib/format';
 
 function LogoMark() {
-  return (
-    <span className="relative flex h-6 w-6 items-center justify-center rounded-[7px] border-[1.5px] border-mint">
-      <span className="h-[9px] w-[9px] rotate-45 rounded-full border-[1.5px] border-violet border-t-transparent" />
-    </span>
-  );
+  return <RecurraMark size={26} />;
 }
 
 export default function DashboardPage() {
