@@ -22,14 +22,27 @@ contract SubscriptionVault is Ownable, ReentrancyGuard {
     // Wired once at deploy, then immutable in practice (same as Registry).
     address public executor;
 
+    event ExecutorSet(address executor);
     event Deposited(address indexed subscriber, address indexed token, uint256 amount);
     event Debited(address indexed subscriber, address indexed token, uint256 amount, address recipient);
     event Withdrawn(address indexed subscriber, address indexed token, uint256 amount);
 
     error ZeroAmount(); // deposit/withdraw/debit of 0
     error InsufficientBalance(); // withdraw/debit exceeds escrowed balance
+    error NotExecutor(); // debit by anyone but the PaymentExecutor
+    error ExecutorAlreadySet(); // one-time wiring guard
+    error ZeroAddress(); // setExecutor(0) would brick debit forever
 
     constructor() Ownable(msg.sender) {}
+
+    /// One-time deploy wiring, identical to the Registry's: points debit's
+    /// gate at the PaymentExecutor, then not even the owner can redirect it.
+    function setExecutor(address newExecutor) external onlyOwner {
+        if (newExecutor == address(0)) revert ZeroAddress();
+        if (executor != address(0)) revert ExecutorAlreadySet();
+        executor = newExecutor;
+        emit ExecutorSet(newExecutor);
+    }
 
     /// Escrow funds for future charges. Deposits are always to the caller's
     /// own balance — msg.sender on both sides, so there is no parameter to
@@ -78,5 +91,27 @@ contract SubscriptionVault is Ownable, ReentrancyGuard {
         emit Withdrawn(msg.sender, token, amount);
     }
 
-    // TODO: setExecutor + debit (commit 3)
+    /// The single path by which escrow reaches a merchant — Executor-only.
+    /// The vault never asks WHY money moves: "is this charge legitimate?"
+    /// (active? due? right amount? right merchant?) is entirely the
+    /// Executor's job; every parameter here arrives from plan state the
+    /// Executor read on-chain, never from backend calldata. The vault
+    /// guarantees exactly one thing: no Executor call, no debit.
+    ///
+    /// Outbound flow: same debit-then-transfer ordering as withdraw.
+    function debit(address subscriber, address token, uint256 amount, address merchant) external nonReentrant {
+        if (msg.sender != executor) revert NotExecutor();
+        if (amount == 0) revert ZeroAmount();
+
+        uint256 balance = balances[subscriber][token];
+        if (balance < amount) revert InsufficientBalance();
+
+        // unchecked: can't underflow, checked against balance above.
+        unchecked {
+            balances[subscriber][token] = balance - amount;
+        }
+        IERC20(token).safeTransfer(merchant, amount);
+
+        emit Debited(subscriber, token, amount, merchant);
+    }
 }
