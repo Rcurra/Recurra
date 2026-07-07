@@ -30,6 +30,9 @@ contract PaymentExecutor is Ownable {
     );
 
     error NotAuthorized(); // executePayment by anyone but authorizedExecutor
+    error NotDue(); // charge attempted before nextPaymentDue (benign scheduler race)
+    error SubscriptionInactive(); // cancelled sub OR deactivated plan
+    error InsufficientVaultBalance(); // escrow can't cover the plan amount
     error ZeroAddress(); // constructor/rotation wiring to 0
 
     constructor(address registry_, address vault_) Ownable(msg.sender) {
@@ -48,5 +51,38 @@ contract PaymentExecutor is Ownable {
         emit AuthorizedExecutorSet(newExecutor);
     }
 
-    // TODO: executePayment (next commit)
+    /// The only entry point for moving a subscription payment. The backend
+    /// sends nothing but the subId — every fact that decides whether and how
+    /// money moves (amount, token, recipient, due-ness) is re-read from
+    /// chain state right here (invariant #5). The four checks, in order:
+    ///
+    ///   1. caller is the authorized trigger
+    ///   2. sub AND plan still active (one error covers both — the caller
+    ///      can't act on the difference)
+    ///   3. actually due — this is also what makes racing scheduler ticks
+    ///      safe: the second tick reverts NotDue, so idempotency comes from
+    ///      the chain, not backend bookkeeping
+    ///   4. escrow covers the plan amount
+    ///
+    /// Then markPaid BEFORE debit — CEI at the system level: the schedule
+    /// advances before money moves, so by the time any token code runs the
+    /// sub is already not-due and a re-triggered payment bounces off check 3.
+    function executePayment(uint256 subId) external {
+        if (msg.sender != authorizedExecutor) revert NotAuthorized();
+
+        (uint256 planId, address subscriber, uint256 nextPaymentDue, bool subActive) = registry.subscriptions(subId);
+        (address merchant, address token, uint256 amount,, bool planActive) = registry.plans(planId);
+        // A nonexistent sub reads as planId 0 / subActive false, so it lands
+        // here too — no separate existence check needed.
+        if (!subActive || !planActive) revert SubscriptionInactive();
+
+        if (block.timestamp < nextPaymentDue) revert NotDue();
+
+        if (vault.balances(subscriber, token) < amount) revert InsufficientVaultBalance();
+
+        registry.markPaid(subId);
+        vault.debit(subscriber, token, amount, merchant);
+
+        emit PaymentExecuted(subId, subscriber, merchant, token, amount);
+    }
 }
