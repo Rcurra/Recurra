@@ -70,8 +70,13 @@ contract SubscriptionRegistry is Ownable {
     /// Example: createPlan(USDC, 10e6, 30 days) = "10 USDC every 30 days, paid to me".
     function createPlan(address token, uint256 amount, uint256 interval) external returns (uint256 planId) {
         // Reject broken plans up front: a zero token/amount/interval plan could
-        // never be paid (or would be chargeable every block).
-        if (token == address(0) || amount == 0 || interval == 0) revert InvalidPlanParams();
+        // never be paid (or would be chargeable every block). The 10-year cap
+        // keeps markPaid's `nextPaymentDue + interval` from ever overflowing —
+        // an absurd interval would brick the sub with checked-math reverts
+        // while isDue keeps reporting it as due (scheduler retry loop).
+        if (token == address(0) || amount == 0 || interval == 0 || interval > 3650 days) {
+            revert InvalidPlanParams();
+        }
 
         // Grab the next free ID, then bump the counter for the plan after this one.
         // unchecked: a uint256 id counter can't realistically overflow.
