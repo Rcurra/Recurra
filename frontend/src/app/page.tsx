@@ -141,17 +141,23 @@ export default function LandingPage() {
         ))}
       </div>
 
-      {/* nav: just the name and the mark. nothing else. */}
+      {/* nav: just the name and the mark. A glass backing keeps it legible
+          once there's content to scroll underneath it. */}
       <nav
         style={{
           position: 'fixed',
-          top: 22,
+          top: 18,
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 20,
           display: 'flex',
           alignItems: 'center',
           gap: 10,
+          padding: '8px 18px',
+          borderRadius: 999,
+          border: `1px solid ${T.border}`,
+          background: T.cardGlass,
+          backdropFilter: 'blur(10px)',
         }}
       >
         <LogoMark />
