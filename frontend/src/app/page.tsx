@@ -42,7 +42,7 @@ export default function LandingPage() {
       <style>{`
         @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
-        @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } }
+        @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(22px,-30px); } }
         @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
         @keyframes planetWave { 0% { transform: scale(1); opacity: 0.38; } 65% { transform: scale(2.6); opacity: 0; } 100% { transform: scale(2.6); opacity: 0; } }
       `}</style>
@@ -70,12 +70,12 @@ export default function LandingPage() {
             crescent shadow lower-right, the odd surface band or ring */}
         {(
           [
-            { left: '9%', top: '18%', size: 10, color: T.violetLight, ring: true, band: false, dur: 22 },
-            { left: '86%', top: '13%', size: 7, color: T.mint, ring: false, band: true, dur: 26 },
-            { left: '78%', top: '72%', size: 12, color: T.violet, ring: true, band: false, dur: 30 },
-            { left: '14%', top: '76%', size: 6, color: T.text, ring: false, band: false, dur: 24 },
-            { left: '68%', top: '32%', size: 5, color: T.mint, ring: false, band: false, dur: 28 },
-            { left: '28%', top: '38%', size: 8, color: T.violetLight, ring: false, band: true, dur: 34 },
+            { left: '9%', top: '18%', size: 10, color: T.violetLight, ring: true, band: false, dur: 11 },
+            { left: '86%', top: '13%', size: 7, color: T.mint, ring: false, band: true, dur: 13 },
+            { left: '78%', top: '72%', size: 12, color: T.violet, ring: true, band: false, dur: 15 },
+            { left: '14%', top: '76%', size: 6, color: T.text, ring: false, band: false, dur: 12 },
+            { left: '68%', top: '32%', size: 5, color: T.mint, ring: false, band: false, dur: 14 },
+            { left: '28%', top: '38%', size: 8, color: T.violetLight, ring: false, band: true, dur: 17 },
           ] as const
         ).map((p, i) => (
           <svg
