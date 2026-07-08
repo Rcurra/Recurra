@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { loginWithEmail } from '@/features/auth';
 import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
@@ -32,11 +33,14 @@ export default function LoginPage() {
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-6">
       <Starfield />
 
-      {/* same nav as the landing: just the mark and the name */}
-      <nav className="fixed top-[22px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5">
+      {/* same nav as the landing: mark + name, glass pill, links home */}
+      <Link
+        href="/"
+        className="fixed top-[18px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-line bg-surface/75 px-[18px] py-2 backdrop-blur-[10px]"
+      >
         <RecurraMark size={28} />
         <span className="numeric text-sm font-semibold tracking-[0.16em] text-ink">RECURRA</span>
-      </nav>
+      </Link>
 
       <div className="relative z-10 w-full max-w-sm" style={{ animation: 'fadeUp 0.8s ease both' }}>
         <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
