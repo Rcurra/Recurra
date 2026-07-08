@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { loginWithEmail } from '@/features/auth';
 import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Login = Magic email OTP, nothing else. Zero signatures — browsing is free;
 // the 7702 upgrade + session key happen lazily at first subscribe (F4).
@@ -15,6 +18,10 @@ export default function LoginPage() {
   const router = useRouter();
 
   async function handleLogin() {
+    if (!EMAIL_PATTERN.test(email)) {
+      setError('Enter a valid email address');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -32,16 +39,22 @@ export default function LoginPage() {
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-6">
       <Starfield />
 
-      {/* same nav as the landing: just the mark and the name */}
-      <nav className="fixed top-[22px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5">
+      {/* same nav as the landing: mark + name, glass pill, links home */}
+      <Link
+        href="/"
+        className="fixed top-[18px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-line bg-surface/75 px-[18px] py-2 backdrop-blur-[10px]"
+      >
         <RecurraMark size={28} />
         <span className="numeric text-sm font-semibold tracking-[0.16em] text-ink">RECURRA</span>
-      </nav>
+      </Link>
 
-      <div className="relative z-10 w-full max-w-sm" style={{ animation: 'fadeUp 0.8s ease both' }}>
+      <div className="relative z-10 w-full max-w-sm">
         <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
 
-        <div className="relative overflow-hidden rounded-2xl border border-line bg-surface/75 p-8 backdrop-blur-xl">
+        <div
+          className="relative overflow-hidden rounded-2xl border border-line bg-surface/75 p-8 backdrop-blur-xl"
+          style={{ animation: 'fadeUp 0.7s ease both' }}
+        >
           {/* gradient hairline, same signature as the vault card */}
           <div
             className="absolute inset-x-0 top-0 h-px"
@@ -49,44 +62,52 @@ export default function LoginPage() {
           />
 
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-5">
+            <div className="mb-5" style={{ animation: 'fadeUp 0.7s ease both 0.1s' }}>
               <RecurraMark size={64} spin />
             </div>
-            <p className="numeric mb-2 text-[10px] uppercase tracking-[0.28em] text-ink-faint">
-              Welcome to Recurra
-            </p>
-            <h1 className="text-xl font-semibold text-ink">Sign in with email</h1>
-            <p className="numeric mt-2 text-[11.5px] leading-relaxed tracking-[0.06em] text-ink-muted">
-              One email. One signature, later.
-              <br />
-              Payments run themselves after that.
-            </p>
+            <div style={{ animation: 'fadeUp 0.7s ease both 0.18s' }}>
+              <p className="numeric mb-2 text-[10px] uppercase tracking-[0.28em] text-ink-faint">
+                Welcome to Recurra
+              </p>
+              <h1 className="text-xl font-semibold text-ink">Sign in with email</h1>
+              <p className="numeric mt-2 text-[11.5px] leading-relaxed tracking-[0.06em] text-ink-muted">
+                One email. One signature, later.
+                <br />
+                Payments run themselves after that.
+              </p>
+            </div>
           </div>
 
-          <label htmlFor="email" className="numeric mb-2 block text-[10px] uppercase tracking-[0.2em] text-ink-faint">
-            Email address
-          </label>
-          <input
-            id="email"
-            type="email"
-            placeholder="you@example.com"
-            value={email}
-            autoFocus
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && email && handleLogin()}
-            className="mb-4 w-full rounded-xl border border-line bg-canvas/80 px-4 py-3.5 text-sm text-ink transition placeholder:text-ink-faint focus:border-mint/60 focus:shadow-[0_0_0_3px_rgba(0,229,160,0.08)] focus:outline-none"
-          />
+          <div style={{ animation: 'fadeUp 0.7s ease both 0.26s' }}>
+            <label htmlFor="email" className="numeric mb-2 block text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+              Email address
+            </label>
+            <input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              autoFocus
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError(null);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && email && handleLogin()}
+              className="mb-4 w-full rounded-xl border border-line bg-canvas/80 px-4 py-3.5 text-sm text-ink transition placeholder:text-ink-faint focus:border-mint/60 focus:shadow-[0_0_0_3px_rgba(0,229,160,0.08)] focus:outline-none"
+            />
+          </div>
           <button
             onClick={handleLogin}
             disabled={loading || !email}
             className="w-full rounded-xl bg-mint px-6 py-3.5 text-sm font-semibold text-canvas transition hover:shadow-[0_6px_24px_-8px_var(--mint)] hover:brightness-110 disabled:opacity-40 disabled:hover:shadow-none"
+            style={{ animation: 'fadeUp 0.7s ease both 0.34s' }}
           >
             {loading ? 'Checking your email…' : 'Continue'}
           </button>
 
           {error && <p className="mt-4 text-center text-sm text-danger">{error}</p>}
 
-          <div className="mt-7 border-t border-line pt-5">
+          <div className="mt-7 border-t border-line pt-5" style={{ animation: 'fadeUp 0.7s ease both 0.42s' }}>
             <div className="flex items-center justify-center gap-4">
               {['No seed phrase', 'Fees covered', 'Withdraw anytime'].map((line) => (
                 <span key={line} className="flex items-center gap-1.5 text-[11px] text-ink-faint">
@@ -98,7 +119,10 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="numeric mt-6 text-center text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+        <p
+          className="numeric mt-6 text-center text-[10px] uppercase tracking-[0.2em] text-ink-faint"
+          style={{ animation: 'fadeUp 0.7s ease both 0.5s' }}
+        >
           Powered by Magic · secured by your inbox
         </p>
       </div>

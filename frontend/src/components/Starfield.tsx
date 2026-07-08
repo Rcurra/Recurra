@@ -6,7 +6,7 @@ export function Starfield({ stars = 40, planets = true }: { stars?: number; plan
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
       <style>{`
         @keyframes sfTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
-        @keyframes sfDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(7px,-11px); } }
+        @keyframes sfDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(22px,-30px); } }
         @keyframes sfGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
         @keyframes sfWave { 0% { transform: scale(1); opacity: 0.38; } 65% { transform: scale(2.6); opacity: 0; } 100% { transform: scale(2.6); opacity: 0; } }
       `}</style>
@@ -31,8 +31,8 @@ export function Starfield({ stars = 40, planets = true }: { stars?: number; plan
       {planets &&
         (
           [
-            { left: '12%', top: '16%', size: 9, color: 'var(--violet-light)', ring: true, dur: 24 },
-            { left: '82%', top: '74%', size: 11, color: 'var(--mint)', ring: false, dur: 30 },
+            { left: '12%', top: '16%', size: 9, color: 'var(--violet-light)', ring: true, dur: 12 },
+            { left: '82%', top: '74%', size: 11, color: 'var(--mint)', ring: false, dur: 15 },
           ] as const
         ).map((p, i) => (
           <svg
