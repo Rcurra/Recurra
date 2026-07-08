@@ -272,29 +272,38 @@ export default function LandingPage() {
           </button>
         </div>
 
-        {/* scroll cue — pinned to the hero's bottom edge, so it leaves
-            with the hero instead of chasing the reader down the page */}
+        {/* scroll cue — pinned to the hero's bottom edge, so it leaves with
+            the hero instead of chasing the reader down the page. Centering
+            (translateX) and the entrance animation (translateY) live on
+            separate elements -- a CSS animation replaces the whole
+            `transform` property, so combining both on one node knocks the
+            centering off the moment the animation plays. */}
         <div
-          className="numeric"
           style={{
             position: 'absolute',
             bottom: 26,
             left: '50%',
             transform: 'translateX(-50%)',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 10,
-            letterSpacing: '0.28em',
-            color: T.faint,
-            animation: 'fadeUp 1s ease both 0.9s',
           }}
         >
-          SCROLL TO EXPLORE
-          <svg width="12" height="7" viewBox="0 0 12 7" style={{ animation: 'scrollNudge 2.6s ease-in-out infinite' }}>
-            <path d="M1 1 L6 6 L11 1" fill="none" stroke={T.dim} strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
+          <div
+            className="numeric"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 10,
+              letterSpacing: '0.28em',
+              color: T.faint,
+              animation: 'fadeUp 1s ease both 0.9s',
+            }}
+          >
+            SCROLL TO EXPLORE
+            <svg width="12" height="7" viewBox="0 0 12 7" style={{ animation: 'scrollNudge 2.6s ease-in-out infinite' }}>
+              <path d="M1 1 L6 6 L11 1" fill="none" stroke={T.dim} strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
       </section>
 
