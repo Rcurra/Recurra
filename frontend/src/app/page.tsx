@@ -6,6 +6,7 @@ import { TwoSides } from '@/components/landing/TwoSides';
 import { Lifecycle } from '@/components/landing/Lifecycle';
 import { BuiltOn } from '@/components/landing/BuiltOn';
 import { Footer } from '@/components/landing/Footer';
+import { ScrollProgress } from '@/components/landing/ScrollProgress';
 import { T } from '@/components/landing/tokens';
 
 // ─────────────────────────────────────────────────────────────
@@ -140,6 +141,8 @@ export default function LandingPage() {
           </svg>
         ))}
       </div>
+
+      <ScrollProgress />
 
       {/* nav: just the name and the mark. A glass backing keeps it legible
           once there's content to scroll underneath it. */}
