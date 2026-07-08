@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { RecurraMark } from '@/components/RecurraMark';
 import { TwoSides } from '@/components/landing/TwoSides';
 import { Lifecycle } from '@/components/landing/Lifecycle';
+import { BuiltOn } from '@/components/landing/BuiltOn';
+import { Footer } from '@/components/landing/Footer';
 import { T } from '@/components/landing/tokens';
 
 // ─────────────────────────────────────────────────────────────
@@ -264,23 +266,6 @@ export default function LandingPage() {
           </button>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: 26,
-            marginTop: 48,
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            animation: 'fadeUp 1s ease both 0.6s',
-          }}
-        >
-          {['Magic', 'ZeroDev', 'Openfort', 'Particle', 'Arbitrum'].map((n) => (
-            <span key={n} className="numeric" style={{ fontSize: 12, color: T.faint, letterSpacing: '0.08em' }}>
-              {n}
-            </span>
-          ))}
-        </div>
-
         {/* scroll cue — pinned to the hero's bottom edge, so it leaves
             with the hero instead of chasing the reader down the page */}
         <div
@@ -309,6 +294,8 @@ export default function LandingPage() {
 
       <TwoSides />
       <Lifecycle />
+      <BuiltOn />
+      <Footer />
 
     </div>
   );
