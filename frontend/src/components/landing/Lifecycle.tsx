@@ -34,7 +34,7 @@ function StepCard({
     <div
       style={{
         width,
-        padding: '15px 18px',
+        padding: '13px 18px',
         borderRadius: 12,
         border: `1px solid ${highlight ? T.violetLight : T.border}`,
         background: T.cardGlass,
@@ -62,9 +62,9 @@ function DownConnector() {
     <div
       style={{
         width: 1,
-        height: 26,
+        height: 20,
         background: `linear-gradient(${T.border}, ${T.borderBright})`,
-        margin: '4px 0',
+        margin: '3px 0',
       }}
     />
   );
@@ -76,7 +76,7 @@ export function Lifecycle() {
       style={{
         position: 'relative',
         zIndex: 10,
-        padding: '70px 24px 80px',
+        padding: '60px 24px 64px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -103,14 +103,14 @@ export function Lifecycle() {
         </p>
       </Reveal>
 
-      <Reveal delay={0.15} style={{ marginTop: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+      <Reveal delay={0.15} style={{ marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: 12,
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: 10,
             width: '100%',
-            maxWidth: 940,
+            maxWidth: 560,
           }}
         >
           {STEPS.map((step, i) => (
@@ -120,10 +120,10 @@ export function Lifecycle() {
 
         <DownConnector />
 
-        <StepCard label={MERCHANT_STEP.label} detail={MERCHANT_STEP.detail} width="min(92vw, 300px)" />
+        <StepCard label={MERCHANT_STEP.label} detail={MERCHANT_STEP.detail} width="min(92vw, 274px)" />
       </Reveal>
 
-      <Reveal delay={0.3} style={{ marginTop: 32, textAlign: 'center' }}>
+      <Reveal delay={0.3} style={{ marginTop: 26, textAlign: 'center' }}>
         <p
           className="numeric"
           style={{
