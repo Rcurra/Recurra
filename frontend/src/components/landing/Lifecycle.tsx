@@ -4,26 +4,67 @@ import { Reveal } from './Reveal';
 import { T } from './tokens';
 
 // The lifecycle of one dollar — Recurra's signature section. Straight from
-// CONCEPT.md's "lifecycle of one dollar" diagram: a vertical mono-type flow,
-// hairline connectors, no code-block styling. Every claim here is one the
-// contracts actually enforce -- nothing decorative the architecture can't honor.
+// CONCEPT.md's "lifecycle of one dollar" diagram: four steps run side by
+// side (they read left-to-right, like the flow itself), the fifth — where
+// funds actually leave escrow — sits apart below. Every claim here is one
+// the contracts actually enforce -- nothing decorative the architecture
+// can't honor.
 
 const STEPS = [
   { label: 'YOUR USDC', detail: 'deposit() — you sign, always reversible' },
-  { label: 'VAULT', detail: 'escrow. still yours. withdraw() never reverts for policy reasons' },
-  { label: 'SCHEDULER SEES: SUB #7 IS DUE', detail: 'the backend — a trigger, never a trustee' },
-  { label: 'EXECUTOR VERIFIES ON-CHAIN', detail: 'active? due? funded? exact amount from the plan, never from calldata' },
-  { label: 'MERCHANT', detail: 'funds leave escrow only here' },
+  { label: 'VAULT', detail: 'escrow. still yours. withdraw() never reverts' },
+  { label: 'SCHEDULER: SUB #7 IS DUE', detail: 'the backend — a trigger, never a trustee' },
+  { label: 'EXECUTOR VERIFIES ON-CHAIN', detail: 'active? due? funded? exact amount from the plan' },
 ] as const;
 
-function Connector() {
+const MERCHANT_STEP = { label: 'MERCHANT', detail: 'funds leave escrow only here' } as const;
+
+function StepCard({
+  label,
+  detail,
+  highlight = false,
+  width = '100%',
+}: {
+  label: string;
+  detail: string;
+  highlight?: boolean;
+  width?: string;
+}) {
+  return (
+    <div
+      style={{
+        width,
+        padding: '15px 18px',
+        borderRadius: 12,
+        border: `1px solid ${highlight ? T.violetLight : T.border}`,
+        background: T.cardGlass,
+        textAlign: 'center',
+      }}
+    >
+      <div
+        className="numeric"
+        style={{
+          fontSize: 11.5,
+          letterSpacing: '0.1em',
+          color: highlight ? T.violetLight : T.text,
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 12, color: T.faint, marginTop: 6, lineHeight: 1.5 }}>{detail}</div>
+    </div>
+  );
+}
+
+function DownConnector() {
   return (
     <div
       style={{
         width: 1,
-        height: 30,
+        height: 26,
         background: `linear-gradient(${T.border}, ${T.borderBright})`,
-        margin: '2px 0',
+        margin: '4px 0',
       }}
     />
   );
@@ -35,7 +76,7 @@ export function Lifecycle() {
       style={{
         position: 'relative',
         zIndex: 10,
-        padding: '80px 24px 100px',
+        padding: '70px 24px 80px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -62,38 +103,27 @@ export function Lifecycle() {
         </p>
       </Reveal>
 
-      <Reveal delay={0.15} style={{ marginTop: 56, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {STEPS.map((step, i) => (
-          <div key={step.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div
-              style={{
-                width: 'min(92vw, 460px)',
-                padding: '16px 22px',
-                borderRadius: 12,
-                border: `1px solid ${i === 3 ? T.violetLight : T.border}`,
-                background: T.cardGlass,
-                textAlign: 'center',
-              }}
-            >
-              <div
-                className="numeric"
-                style={{
-                  fontSize: 12.5,
-                  letterSpacing: '0.14em',
-                  color: i === 3 ? T.violetLight : T.text,
-                  fontWeight: 600,
-                }}
-              >
-                {step.label}
-              </div>
-              <div style={{ fontSize: 12.5, color: T.faint, marginTop: 6, lineHeight: 1.5 }}>{step.detail}</div>
-            </div>
-            {i < STEPS.length - 1 && <Connector />}
-          </div>
-        ))}
+      <Reveal delay={0.15} style={{ marginTop: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+            width: '100%',
+            maxWidth: 940,
+          }}
+        >
+          {STEPS.map((step, i) => (
+            <StepCard key={step.label} label={step.label} detail={step.detail} highlight={i === 3} />
+          ))}
+        </div>
+
+        <DownConnector />
+
+        <StepCard label={MERCHANT_STEP.label} detail={MERCHANT_STEP.detail} width="min(92vw, 300px)" />
       </Reveal>
 
-      <Reveal delay={0.3} style={{ marginTop: 40, textAlign: 'center' }}>
+      <Reveal delay={0.3} style={{ marginTop: 32, textAlign: 'center' }}>
         <p
           className="numeric"
           style={{
