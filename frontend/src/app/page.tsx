@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { RecurraMark } from '@/components/RecurraMark';
 import { TwoSides } from '@/components/landing/TwoSides';
+import { Lifecycle } from '@/components/landing/Lifecycle';
 import { T } from '@/components/landing/tokens';
 
 // ─────────────────────────────────────────────────────────────
@@ -307,6 +308,7 @@ export default function LandingPage() {
       </section>
 
       <TwoSides />
+      <Lifecycle />
 
     </div>
   );
