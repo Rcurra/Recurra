@@ -98,8 +98,8 @@ export function Lifecycle() {
           The lifecycle of one dollar
         </h2>
         <p style={{ fontSize: 14.5, color: T.dim, margin: '16px 0 0', lineHeight: 1.6 }}>
-          Every payment retraces the same path — the executor re-derives it from
-          on-chain state, so no off-chain party ever has to be trusted with the money.
+          Every payment follows the same steps, checked on-chain before any money
+          moves — so no server, not even ours, ever has to be trusted with your funds.
         </p>
       </Reveal>
 
