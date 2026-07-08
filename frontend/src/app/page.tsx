@@ -35,7 +35,6 @@ export default function LandingPage() {
         minHeight: '100vh',
         background: T.bg,
         color: T.text,
-        overflow: 'hidden',
         position: 'relative',
       }}
     >
@@ -45,10 +44,12 @@ export default function LandingPage() {
         @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(22px,-30px); } }
         @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }
         @keyframes planetWave { 0% { transform: scale(1); opacity: 0.38; } 65% { transform: scale(2.6); opacity: 0; } 100% { transform: scale(2.6); opacity: 0; } }
+        @keyframes scrollNudge { 0%,100% { transform: translateY(0); opacity: 0.45; } 50% { transform: translateY(5px); opacity: 0.9; } }
       `}</style>
 
-      {/* starfield — the only atmosphere */}
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+      {/* starfield — the only atmosphere. Fixed: the universe holds still
+          while the story scrolls past it. */}
+      <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
         {Array.from({ length: 64 }).map((_, i) => (
           <div
             key={i}
@@ -167,7 +168,7 @@ export default function LandingPage() {
         </span>
       </nav>
 
-      <div
+      <section
         style={{
           position: 'relative',
           zIndex: 10,
@@ -289,7 +290,32 @@ export default function LandingPage() {
             </span>
           ))}
         </div>
-      </div>
+
+        {/* scroll cue — pinned to the hero's bottom edge, so it leaves
+            with the hero instead of chasing the reader down the page */}
+        <div
+          className="numeric"
+          style={{
+            position: 'absolute',
+            bottom: 26,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 10,
+            letterSpacing: '0.28em',
+            color: T.faint,
+            animation: 'fadeUp 1s ease both 0.9s',
+          }}
+        >
+          SCROLL TO EXPLORE
+          <svg width="12" height="7" viewBox="0 0 12 7" style={{ animation: 'scrollNudge 2.6s ease-in-out infinite' }}>
+            <path d="M1 1 L6 6 L11 1" fill="none" stroke={T.dim} strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        </div>
+      </section>
 
     </div>
   );
