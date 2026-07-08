@@ -1,32 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useSubscriptions } from '@/features/subscriptions';
+import { AccountChip, useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { Ambient } from '@/components/Ambient';
 import { RecurraMark } from '@/components/RecurraMark';
-import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeUntil } from '@/lib/format';
+import { cycleProgress, formatUSDC, intervalLabel, timeUntil } from '@/lib/format';
 
 function LogoMark() {
   return <RecurraMark size={26} />;
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [address, setAddress] = useState<string | null>(null);
+  const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
-
-  useEffect(() => {
-    const addr = localStorage.getItem('recurra_address');
-    if (!addr) {
-      router.push('/login');
-      return;
-    }
-    setAddress(addr);
-  }, [router]);
 
   const { subscriptions, loading, error } = useSubscriptions(address);
 
@@ -58,11 +48,7 @@ export default function DashboardPage() {
             <LogoMark />
             <span className="numeric text-sm font-semibold tracking-[0.12em] text-ink">RECURRA</span>
           </div>
-          {address && (
-            <span className="numeric rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-muted">
-              {shortAddress(address)}
-            </span>
-          )}
+          <AccountChip />
         </div>
       </header>
 
