@@ -28,7 +28,7 @@ export default function DiscoverPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Plan | null>(null);
 
-  const { subscriptions } = useSubscriptions(address);
+  const { subscriptions, refetch } = useSubscriptions(address);
   const subscribedPlanIds = new Set(subscriptions.filter((s) => s.active).map((s) => s.planId));
 
   useEffect(() => {
@@ -185,7 +185,7 @@ export default function DiscoverPage() {
         ))}
       </div>
 
-      <PlanDetailModal plan={selected} onClose={() => setSelected(null)} />
+      <PlanDetailModal plan={selected} onClose={() => setSelected(null)} onSubscribed={refetch} />
     </div>
   );
 }

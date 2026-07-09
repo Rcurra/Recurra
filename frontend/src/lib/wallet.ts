@@ -69,8 +69,15 @@ export async function unsubscribe(address: string, subId: number): Promise<void>
 
 // Approve only if the current allowance is short, then deposit — two
 // signatures in dev mode (three counting a prior subscribe); F4 batches
-// this whole sequence into the one-signature UserOp.
-export async function approveAndDeposit(address: string, amount: bigint): Promise<void> {
+// this whole sequence into the one-signature UserOp. onStep is optional,
+// purely for a caller that wants to show "step 2 of 3" progress (the
+// subscribe flow's signature-collapse stub) — skipped entirely if the
+// allowance already covers the amount.
+export async function approveAndDeposit(
+  address: string,
+  amount: bigint,
+  onStep?: (step: 'approve' | 'deposit') => void,
+): Promise<void> {
   const walletClient = requireWalletClient();
   const usdc = getUsdcAddress();
   const vault = getVaultAddress();
@@ -84,6 +91,7 @@ export async function approveAndDeposit(address: string, amount: bigint): Promis
   });
 
   if (allowance < amount) {
+    onStep?.('approve');
     const approveHash = await walletClient.writeContract({
       account,
       chain: getChain(),
@@ -95,6 +103,7 @@ export async function approveAndDeposit(address: string, amount: bigint): Promis
     await getPublicClient().waitForTransactionReceipt({ hash: approveHash });
   }
 
+  onStep?.('deposit');
   const depositHash = await walletClient.writeContract({
     account,
     chain: getChain(),
