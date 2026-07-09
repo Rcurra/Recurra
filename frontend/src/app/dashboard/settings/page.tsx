@@ -1,9 +1,26 @@
+import { MOCK_PERMISSIONS } from '@/lib/mockData';
+
 export default function SettingsPage() {
   return (
-    <div className="mx-auto flex max-w-3xl flex-col items-center px-6 py-24 text-center">
-      <p className="numeric mb-3 text-[11px] uppercase tracking-[0.24em] text-ink-faint">Settings</p>
-      <p className="text-sm text-ink-muted">Session-key permissions arrive with the AA stack — F4.</p>
-      <p className="mt-1 text-xs text-ink-faint">Read-only, always — what you approved, plain English.</p>
+    <div className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mb-1 flex items-center gap-2">
+        <p className="numeric text-[11px] uppercase tracking-[0.24em] text-ink-faint">Settings</p>
+        <span className="numeric rounded-full border border-line px-2 py-0.5 text-[9px] tracking-[0.14em] text-ink-faint">
+          PREVIEW
+        </span>
+      </div>
+      <p className="mb-6 text-xs text-ink-faint">
+        Sample permissions — real session-key scope arrives with F4. Read-only, always.
+      </p>
+
+      <ul className="space-y-3">
+        {MOCK_PERMISSIONS.map((p) => (
+          <li key={p.sentence} className="rounded-2xl border border-line bg-surface p-5">
+            <p className="text-sm text-ink">{p.sentence}</p>
+            {p.expiresIn && <p className="numeric mt-1.5 text-xs text-ink-faint">{p.expiresIn}</p>}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
