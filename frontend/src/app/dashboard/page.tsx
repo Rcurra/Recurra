@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
-import { VaultCard, VaultModal } from '@/features/vault';
+import { VaultHero, VaultModal } from '@/features/vault';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
@@ -14,33 +14,54 @@ import { MOCK_RECEIPTS } from '@/lib/mockData';
 
 const PREVIEW_SIZE = 2;
 
-// Every teaser card shares this shape: a label, a "View all," and a short
-// preview — the same pattern Overview repeats for each section instead of
-// dumping full lists inline.
-function OverviewCard({
+// Section cards under the vault: an accent dot names the section's color,
+// one big lead number carries the glance, mini rows fill in detail, and
+// hover lifts the card with a soft glow in its own accent — alive like
+// the landing's planets, not a static box.
+function SectionCard({
   title,
   href,
+  accent,
+  lead,
+  leadLabel,
   badge,
   children,
 }: {
   title: string;
   href: string;
+  accent: string; // CSS color — the section's hue
+  lead: string;
+  leadLabel: string;
   badge?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
-    <GlassCard hairline className="flex h-full flex-col p-5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">{title}</p>
-        <Link href={href} className="numeric shrink-0 whitespace-nowrap text-[11px] text-ink-muted transition hover:text-ink">
-          View all →
-        </Link>
-      </div>
-      {/* the badge gets its own line — a narrow card can't fit
-          title + badge + link on one row without clipping */}
-      {badge ? <div className="mt-2">{badge}</div> : null}
-      <div className="mt-4">{children}</div>
-    </GlassCard>
+    <Link href={href} className="group block">
+      <GlassCard
+        hairline
+        className="flex h-full flex-col p-5 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-[#282c39]"
+        style={{ transitionProperty: 'transform, border-color, box-shadow' }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: accent, boxShadow: `0 0 6px ${accent}` }}
+            />
+            <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">{title}</p>
+          </div>
+          <span className="numeric shrink-0 whitespace-nowrap text-[11px] text-ink-muted transition group-hover:text-ink">
+            View all →
+          </span>
+        </div>
+        {badge ? <div className="mt-2">{badge}</div> : null}
+
+        <p className="numeric mt-4 text-2xl font-semibold text-ink">{lead}</p>
+        <p className="text-[11px] text-ink-faint">{leadLabel}</p>
+
+        {children ? <div className="mt-4">{children}</div> : null}
+      </GlassCard>
+    </Link>
   );
 }
 
@@ -50,10 +71,6 @@ function PreviewBadge() {
       PREVIEW
     </span>
   );
-}
-
-function EmptyRow({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-ink-muted">{children}</p>;
 }
 
 export default function OverviewPage() {
@@ -84,59 +101,72 @@ export default function OverviewPage() {
     .sort((a, b) => a.nextPaymentDue.getTime() - b.nextPaymentDue.getTime())
     .slice(0, PREVIEW_SIZE);
   const plansPreview = Array.from(plans.values()).slice(0, PREVIEW_SIZE);
-  const receiptsPreview = MOCK_RECEIPTS.slice(0, PREVIEW_SIZE);
+  const latestReceipt = MOCK_RECEIPTS[0];
 
   return (
-    <div className="mx-auto max-w-3xl px-6 py-10">
-      {error && <p className="mb-4 text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
+    <div className="mx-auto max-w-3xl px-6 pt-6 pb-10">
+      {error && <p className="mb-2 text-center text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
 
-      {/* ── every section as a card; the vault's door leads the grid ── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" style={{ animation: 'fadeUp 0.7s ease both' }}>
-        <VaultCard onOpen={() => setVaultOpen(true)} />
+      {/* ── the sun: the vault, centered, everything else beneath it ── */}
+      <div className="flex justify-center" style={{ animation: 'fadeUp 0.7s ease both' }}>
+        <VaultHero onOpen={() => setVaultOpen(true)} />
+      </div>
 
-        <OverviewCard title="Subscriptions" href="/dashboard/subscriptions">
-          {!loading && subsPreview.length === 0 && <EmptyRow>Nothing recurring yet.</EmptyRow>}
-          <ul className="space-y-2">
-            {subsPreview.map((sub) => {
-              const plan = plans.get(sub.planId);
-              const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
-              return (
-                <li key={sub.id} className="flex items-center gap-3">
-                  <CadenceRing progress={progress} size={26} strokeWidth={2} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-ink">
+      {/* ── the sections, in orbit below ─────────────────────── */}
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3" style={{ animation: 'fadeUp 0.7s ease both 0.15s' }}>
+        <SectionCard
+          title="Subscriptions"
+          href="/dashboard/subscriptions"
+          accent="var(--mint)"
+          lead={loading ? '…' : String(active.length)}
+          leadLabel="active"
+        >
+          {subsPreview.length > 0 && (
+            <ul className="space-y-2">
+              {subsPreview.map((sub) => {
+                const plan = plans.get(sub.planId);
+                const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+                return (
+                  <li key={sub.id} className="flex items-center gap-3">
+                    <CadenceRing progress={progress} size={26} strokeWidth={2} />
+                    <p className="min-w-0 flex-1 truncate text-xs text-ink">
                       {plan ? `${formatUSDC(plan.amount)} USDC` : `Plan #${sub.planId}`}
                     </p>
-                  </div>
-                  <span className="numeric shrink-0 text-[11px] text-ink-muted">{timeUntil(sub.nextPaymentDue)}</span>
+                    <span className="numeric shrink-0 text-[11px] text-ink-muted">{timeUntil(sub.nextPaymentDue)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="Discover"
+          href="/dashboard/discover"
+          accent="var(--violet-light)"
+          lead={String(plans.size)}
+          leadLabel="plans to explore"
+        >
+          {plansPreview.length > 0 && (
+            <ul className="space-y-2">
+              {plansPreview.map((plan) => (
+                <li key={plan.id} className="flex items-center justify-between text-xs">
+                  <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span>
+                  <span className="text-ink-muted">/ {intervalLabel(plan.intervalSecs)}</span>
                 </li>
-              );
-            })}
-          </ul>
-        </OverviewCard>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
 
-        <OverviewCard title="Discover" href="/dashboard/discover">
-          {plansPreview.length === 0 && <EmptyRow>No plans yet.</EmptyRow>}
-          <ul className="space-y-2">
-            {plansPreview.map((plan) => (
-              <li key={plan.id} className="flex items-center justify-between text-xs">
-                <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span>
-                <span className="text-ink-muted">/ {intervalLabel(plan.intervalSecs)}</span>
-              </li>
-            ))}
-          </ul>
-        </OverviewCard>
-
-        <OverviewCard title="Activity" href="/dashboard/activity" badge={<PreviewBadge />}>
-          <ul className="space-y-2">
-            {receiptsPreview.map((r) => (
-              <li key={r.id} className="flex items-center justify-between text-xs">
-                <span className="numeric text-ink">{formatUSDC(r.amount)} USDC</span>
-                <span className="text-ink-muted">paid</span>
-              </li>
-            ))}
-          </ul>
-        </OverviewCard>
+        <SectionCard
+          title="Activity"
+          href="/dashboard/activity"
+          accent="var(--violet)"
+          lead={`${formatUSDC(latestReceipt.amount)}`}
+          leadLabel="USDC — last payment"
+          badge={<PreviewBadge />}
+        />
       </div>
 
       <VaultModal

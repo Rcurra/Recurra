@@ -1,5 +1,5 @@
-// Vault feature barrel — the closed door (card), the open vault (modal),
+// Vault feature barrel — the closed vault (hero), the open vault (modal),
 // and the door itself for anyone who needs the mark.
-export { VaultCard } from './VaultCard';
+export { VaultHero } from './VaultHero';
 export { VaultModal } from './VaultModal';
 export { VaultDoor } from './VaultDoor';
