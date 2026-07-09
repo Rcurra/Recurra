@@ -43,5 +43,15 @@ export function useSubscriptions(subscriber: string | null) {
 
   const refetch = useCallback(() => setNonce((n) => n + 1), []);
 
+  // Background poll so the charge moment (nextPaymentDue advancing, a
+  // cancelled/new sub appearing) shows up without the user doing anything —
+  // whatever fires executePayment (a terminal cast call today, Henry's
+  // scheduler once it lands) becomes visible on its own.
+  useEffect(() => {
+    if (!subscriber) return;
+    const id = setInterval(() => setNonce((n) => n + 1), 5000);
+    return () => clearInterval(id);
+  }, [subscriber]);
+
   return { subscriptions, loading, error, refetch };
 }

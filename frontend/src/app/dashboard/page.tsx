@@ -55,6 +55,14 @@ export default function OverviewPage() {
 
   const refetchVaultBalance = useCallback(() => setBalanceNonce((n) => n + 1), []);
 
+  // Background poll so the balance tick (the vault dropping when a charge
+  // fires) shows up on its own, same as useSubscriptions' polling.
+  useEffect(() => {
+    if (!address) return;
+    const id = setInterval(() => setBalanceNonce((n) => n + 1), 5000);
+    return () => clearInterval(id);
+  }, [address]);
+
   const active = subscriptions.filter((s) => s.active);
   // monthly commitment across active subs — display math only
   const monthly = active.reduce((sum, s) => {
