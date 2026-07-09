@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
@@ -10,6 +10,7 @@ import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
 import { cycleProgress, formatUSDC, intervalLabel, monthlyEquivalent, shortAddress, timeUntil } from '@/lib/format';
+import { getVaultBalance } from '@/lib/wallet';
 
 function PreviewBadge() {
   return (
@@ -27,6 +28,8 @@ export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [vaultBalance, setVaultBalance] = useState<bigint | null>(null);
+  const [balanceNonce, setBalanceNonce] = useState(0);
 
   const { subscriptions, loading, error } = useSubscriptions(address);
 
@@ -36,6 +39,21 @@ export default function OverviewPage() {
       .then((list) => setPlans(new Map(list.map((p) => [p.id, p]))))
       .catch(() => {}); // panels degrade gracefully without plan detail
   }, []);
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    getVaultBalance(address)
+      .then((b) => {
+        if (!cancelled) setVaultBalance(b);
+      })
+      .catch(() => {}); // reservoir card degrades gracefully without a balance
+    return () => {
+      cancelled = true;
+    };
+  }, [address, balanceNonce]);
+
+  const refetchVaultBalance = useCallback(() => setBalanceNonce((n) => n + 1), []);
 
   const active = subscriptions.filter((s) => s.active);
   // monthly commitment across active subs — display math only
@@ -59,7 +77,7 @@ export default function OverviewPage() {
         style={{ animation: 'fadeUp 0.7s ease both' }}
       >
         {/* ── the vault — the one gradient panel ─────────────── */}
-        <VaultPanel onOpen={() => setVaultOpen(true)} />
+        <VaultPanel onOpen={() => setVaultOpen(true)} balance={vaultBalance} />
 
         {/* ── escrow over time ───────────────────────────────── */}
         <GlassCard hairline className="p-6">
@@ -138,6 +156,9 @@ export default function OverviewPage() {
       <VaultModal
         open={vaultOpen}
         onClose={() => setVaultOpen(false)}
+        address={address}
+        balance={vaultBalance}
+        onChanged={refetchVaultBalance}
         stats={{
           activePlans: loading ? '…' : String(active.length),
           monthlyTotal: loading ? '…' : `${formatUSDC(monthly)} USDC`,
