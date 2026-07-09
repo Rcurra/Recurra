@@ -7,6 +7,7 @@ import { useAuth, AccountChip } from '@/features/auth';
 import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
 import { Ambient } from '@/components/Ambient';
+import { RouteTransition } from '@/components/RouteTransition';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Overview' },
@@ -82,7 +83,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="relative z-10">{children}</div>
+      <div className="relative z-10">
+        <RouteTransition />
+        {children}
+      </div>
     </div>
   );
 }
