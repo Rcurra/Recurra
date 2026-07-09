@@ -9,6 +9,16 @@ export function formatUSDC(amount: bigint): string {
   return `${whole}.${cents.toString().padStart(2, '0')}`;
 }
 
+// The input-edge counterpart — a user-typed "10.5" into the smallest-unit
+// bigint the contracts speak. Null on anything that isn't a plain decimal
+// (rejects negative/scientific/garbage instead of silently coercing it).
+export function parseUSDC(input: string): bigint | null {
+  const trimmed = input.trim();
+  if (!/^\d+(\.\d{1,6})?$/.test(trimmed)) return null;
+  const [whole, frac = ''] = trimmed.split('.');
+  return BigInt(whole) * USDC_DECIMALS + BigInt(frac.padEnd(6, '0'));
+}
+
 // Human time, per the microcopy law: "in 12 days", never timestamps.
 export function timeUntil(date: Date): string {
   const ms = date.getTime() - Date.now();
