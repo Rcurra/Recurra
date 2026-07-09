@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { PlanDetailModal } from '@/features/subscriptions';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { GlassCard } from '@/components/GlassCard';
@@ -18,6 +19,7 @@ export default function DiscoverPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Plan | null>(null);
 
   useEffect(() => {
     api.plans
@@ -71,10 +73,15 @@ export default function DiscoverPage() {
                 const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
                 const isMonthly = plan.intervalSecs === MONTH_SECS;
                 return (
-                  <GlassCard
+                  <button
                     key={plan.id}
+                    onClick={() => setSelected(plan)}
+                    aria-haspopup="dialog"
+                    className="block text-left"
+                  >
+                  <GlassCard
                     hairline
-                    className="group p-5 transition-all duration-300 hover:-translate-y-1 hover:border-[#282c39]"
+                    className="group h-full p-5 transition-all duration-300 hover:-translate-y-1 hover:border-[#282c39]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -102,20 +109,25 @@ export default function DiscoverPage() {
                       </p>
                     </div>
 
-                    <button
-                      disabled
+                    {/* span, not button — this whole card is already a
+                        button, and the action is F3-disabled anyway */}
+                    <span
+                      aria-disabled
                       title="Arrives with F3 — writes go through your account"
-                      className="mt-4 w-full rounded-lg bg-mint px-4 py-2.5 text-sm font-medium text-canvas opacity-40"
+                      className="mt-4 block w-full rounded-lg bg-mint px-4 py-2.5 text-center text-sm font-medium text-canvas opacity-40"
                     >
                       Subscribe
-                    </button>
+                    </span>
                   </GlassCard>
+                  </button>
                 );
               })}
             </div>
           </section>
         ))}
       </div>
+
+      <PlanDetailModal plan={selected} onClose={() => setSelected(null)} />
     </div>
   );
 }
