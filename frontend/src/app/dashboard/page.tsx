@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
+import { GlassCard } from '@/components/GlassCard';
 import { cycleProgress, formatUSDC, intervalLabel, timeUntil } from '@/lib/format';
 import { MOCK_RECEIPTS } from '@/lib/mockData';
 
@@ -27,18 +28,18 @@ function OverviewCard({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col rounded-2xl border border-line bg-surface p-5">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">{title}</p>
-          {badge}
-        </div>
+    <GlassCard hairline className="flex flex-col p-5">
+      <div className="flex items-center justify-between gap-2">
+        <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">{title}</p>
         <Link href={href} className="numeric shrink-0 whitespace-nowrap text-[11px] text-ink-muted transition hover:text-ink">
           View all →
         </Link>
       </div>
-      {children}
-    </section>
+      {/* the badge gets its own line — a third-width card can't fit
+          title + badge + link on one row without clipping */}
+      {badge ? <div className="mt-2">{badge}</div> : null}
+      <div className="mt-4">{children}</div>
+    </GlassCard>
   );
 }
 
@@ -87,13 +88,10 @@ export default function OverviewPage() {
     <div className="mx-auto max-w-3xl px-6 py-10">
       {/* ── the vault — first and biggest, but the same card language
           as everything below it, not a separate hero treatment ───── */}
-      <p className="numeric mb-3 text-[11px] uppercase tracking-[0.2em] text-ink-faint">Your vault</p>
-      <section className="relative mb-6 overflow-hidden rounded-2xl border border-line bg-surface p-6">
-        <div
-          className="absolute inset-x-0 top-0 h-px"
-          style={{ background: 'linear-gradient(90deg, transparent, var(--mint), var(--violet), transparent)' }}
-        />
-        <div className="flex flex-wrap items-end justify-between gap-6">
+      <div style={{ animation: 'fadeUp 0.7s ease both' }}>
+        <p className="numeric mb-3 text-[11px] uppercase tracking-[0.2em] text-ink-faint">Your vault</p>
+        <GlassCard hairline className="mb-6 p-6">
+          <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
             <p className="numeric text-3xl font-semibold text-ink">
               —<span className="text-lg text-ink-faint">.—— USDC</span>
@@ -132,12 +130,13 @@ export default function OverviewPage() {
             </div>
           ))}
         </div>
-      </section>
+      </GlassCard>
+      </div>
 
       {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
       {/* ── every other section, as cards ───────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" style={{ animation: 'fadeUp 0.7s ease both 0.15s' }}>
         <OverviewCard title="Subs" href="/dashboard/subscriptions">
           {!loading && subsPreview.length === 0 && <EmptyRow>Nothing recurring yet.</EmptyRow>}
           <ul className="space-y-2">

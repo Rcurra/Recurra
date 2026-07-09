@@ -32,7 +32,7 @@ export default function SubscriptionsPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <div className="mb-6 flex items-center gap-2">
+      <div className="mb-6 flex items-center gap-2" style={{ animation: 'fadeUp 0.7s ease both' }}>
         {(
           [
             { key: 'active', label: `Active (${active.length})` },
@@ -63,14 +63,14 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      <ul className="space-y-3">
+      <ul className="space-y-3" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
         {shown.map((sub) => {
           const plan = plans.get(sub.planId);
           const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
           return (
             <li
               key={sub.id}
-              className="group relative flex items-center gap-5 overflow-hidden rounded-2xl border border-line bg-surface p-5 transition hover:border-[#282c39] hover:bg-surface-2"
+              className="group relative flex items-center gap-5 overflow-hidden rounded-2xl border border-line bg-surface/75 p-5 backdrop-blur-xl transition hover:border-[#282c39] hover:bg-surface-2"
             >
               <div className="relative">
                 <CadenceRing progress={sub.active ? progress : 0} size={52} />

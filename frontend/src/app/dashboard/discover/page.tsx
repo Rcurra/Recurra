@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
+import { GlassCard } from '@/components/GlassCard';
 import { formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
 
 export default function DiscoverPage() {
@@ -20,7 +21,9 @@ export default function DiscoverPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      <p className="numeric mb-3 text-[11px] uppercase tracking-[0.24em] text-ink-faint">Discover</p>
+      <p className="numeric mb-3 text-[11px] uppercase tracking-[0.24em] text-ink-faint" style={{ animation: 'fadeUp 0.7s ease both' }}>
+        Discover
+      </p>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -30,16 +33,9 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
         {plans.map((plan) => (
-          <div
-            key={plan.id}
-            className="relative overflow-hidden rounded-2xl border border-line bg-surface p-5 transition hover:border-[#282c39] hover:bg-surface-2"
-          >
-            <div
-              className="absolute inset-x-0 top-0 h-px"
-              style={{ background: 'linear-gradient(90deg, transparent, var(--mint), var(--violet), transparent)' }}
-            />
+          <GlassCard key={plan.id} hairline className="p-5 transition hover:border-[#282c39]">
             <p className="numeric text-xl font-semibold text-ink">
               {formatUSDC(plan.amount)} <span className="text-sm font-normal text-ink-muted">USDC</span>
             </p>
@@ -52,7 +48,7 @@ export default function DiscoverPage() {
             >
               Subscribe
             </button>
-          </div>
+          </GlassCard>
         ))}
       </div>
     </div>
