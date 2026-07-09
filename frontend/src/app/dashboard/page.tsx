@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
+import { VaultCard, VaultModal } from '@/features/vault';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
@@ -13,9 +14,9 @@ import { MOCK_RECEIPTS } from '@/lib/mockData';
 
 const PREVIEW_SIZE = 2;
 
-// Every teaser card below the vault shares this shape: a label, a "View
-// all," and a short preview — the same pattern Overview repeats for each
-// section instead of dumping full lists inline.
+// Every teaser card shares this shape: a label, a "View all," and a short
+// preview — the same pattern Overview repeats for each section instead of
+// dumping full lists inline.
 function OverviewCard({
   title,
   href,
@@ -28,14 +29,14 @@ function OverviewCard({
   children: ReactNode;
 }) {
   return (
-    <GlassCard hairline className="flex flex-col p-5">
+    <GlassCard hairline className="flex h-full flex-col p-5">
       <div className="flex items-center justify-between gap-2">
         <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">{title}</p>
         <Link href={href} className="numeric shrink-0 whitespace-nowrap text-[11px] text-ink-muted transition hover:text-ink">
           View all →
         </Link>
       </div>
-      {/* the badge gets its own line — a third-width card can't fit
+      {/* the badge gets its own line — a narrow card can't fit
           title + badge + link on one row without clipping */}
       {badge ? <div className="mt-2">{badge}</div> : null}
       <div className="mt-4">{children}</div>
@@ -58,6 +59,7 @@ function EmptyRow({ children }: { children: ReactNode }) {
 export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
+  const [vaultOpen, setVaultOpen] = useState(false);
 
   const { subscriptions, loading, error } = useSubscriptions(address);
 
@@ -86,58 +88,13 @@ export default function OverviewPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
-      {/* ── the vault — first and biggest, but the same card language
-          as everything below it, not a separate hero treatment ───── */}
-      <div style={{ animation: 'fadeUp 0.7s ease both' }}>
-        <p className="numeric mb-3 text-[11px] uppercase tracking-[0.2em] text-ink-faint">Your vault</p>
-        <GlassCard hairline className="mb-6 p-6">
-          <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="numeric text-3xl font-semibold text-ink">
-              —<span className="text-lg text-ink-faint">.—— USDC</span>
-            </p>
-            <p className="mt-1 text-xs text-ink-muted">
-              escrow balance — arrives with the balance API
-            </p>
-          </div>
-          <div className="flex gap-2.5">
-            <button
-              disabled
-              title="Arrives with F3 — writes go through your account"
-              className="rounded-lg bg-mint px-5 py-2.5 text-sm font-medium text-canvas opacity-40"
-            >
-              + Add funds
-            </button>
-            <button
-              disabled
-              title="Arrives with F3 — always available, no questions asked"
-              className="rounded-lg border border-line px-5 py-2.5 text-sm text-ink opacity-40"
-            >
-              Withdraw anytime
-            </button>
-          </div>
-        </div>
+      {error && <p className="mb-4 text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
 
-        <div className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line sm:grid-cols-3">
-          {[
-            { label: 'Active plans', value: loading ? '…' : String(active.length) },
-            { label: 'Monthly total', value: loading ? '…' : `${formatUSDC(monthly)} USDC` },
-            { label: 'Next charge', value: loading ? '…' : nextDue ? timeUntil(nextDue.nextPaymentDue) : '—' },
-          ].map((s) => (
-            <div key={s.label} className="bg-surface-2 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-wider text-ink-faint">{s.label}</p>
-              <p className="numeric mt-1 text-sm text-ink">{s.value}</p>
-            </div>
-          ))}
-        </div>
-      </GlassCard>
-      </div>
+      {/* ── every section as a card; the vault's door leads the grid ── */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" style={{ animation: 'fadeUp 0.7s ease both' }}>
+        <VaultCard onOpen={() => setVaultOpen(true)} />
 
-      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
-
-      {/* ── every other section, as cards ───────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" style={{ animation: 'fadeUp 0.7s ease both 0.15s' }}>
-        <OverviewCard title="Subs" href="/dashboard/subscriptions">
+        <OverviewCard title="Subscriptions" href="/dashboard/subscriptions">
           {!loading && subsPreview.length === 0 && <EmptyRow>Nothing recurring yet.</EmptyRow>}
           <ul className="space-y-2">
             {subsPreview.map((sub) => {
@@ -181,6 +138,16 @@ export default function OverviewPage() {
           </ul>
         </OverviewCard>
       </div>
+
+      <VaultModal
+        open={vaultOpen}
+        onClose={() => setVaultOpen(false)}
+        stats={{
+          activePlans: loading ? '…' : String(active.length),
+          monthlyTotal: loading ? '…' : `${formatUSDC(monthly)} USDC`,
+          nextCharge: loading ? '…' : nextDue ? timeUntil(nextDue.nextPaymentDue) : '—',
+        }}
+      />
     </div>
   );
 }
