@@ -7,12 +7,11 @@ import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
+import { GlassCard } from '@/components/GlassCard';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeAgo, timeUntil } from '@/lib/format';
 import { MOCK_RECEIPTS } from '@/lib/mockData';
 
-// Activity is a view of this page, not its own route — the third tab
-// takes over the list area with the payment history.
-type Tab = 'active' | 'cancelled' | 'activity';
+type Filter = 'active' | 'cancelled';
 
 // useSearchParams needs a Suspense boundary above it (Next requirement);
 // the page is the boundary, the view is the content.
@@ -28,11 +27,13 @@ function SubscriptionsView() {
   const { address } = useAuth();
   const searchParams = useSearchParams();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
-  // The old /dashboard/activity route redirects here with ?tab=activity.
-  // useSearchParams (not window.location) — during a client-side redirect
-  // the component can mount before the window URL updates; the router's
-  // own params are correct for the route being rendered.
-  const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'activity' ? 'activity' : 'active');
+  const [filter, setFilter] = useState<Filter>('active');
+  // Activity is not a third state — it's a takeover panel, toggled from
+  // the opposite corner. The old /dashboard/activity route deep-links it
+  // open via ?tab=activity (read from the router's params, not
+  // window.location — a client-side redirect can mount this component
+  // before the window URL updates).
+  const [activityOpen, setActivityOpen] = useState(searchParams.get('tab') === 'activity');
 
   const { subscriptions, loading, error } = useSubscriptions(address);
 
@@ -45,40 +46,60 @@ function SubscriptionsView() {
 
   // Two subscription states only — the contracts don't have a "finished"
   // subscription, just active (renews every cycle) and cancelled
-  // (unsubscribe()'d). Activity is the third view, not a third state.
+  // (unsubscribe()'d).
   const active = subscriptions.filter((s) => s.active);
   const cancelled = subscriptions.filter((s) => !s.active);
-  const shown = tab === 'active' ? active : tab === 'cancelled' ? cancelled : [];
+  const shown = filter === 'active' ? active : cancelled;
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
-      <div className="mb-6 flex flex-wrap items-center gap-2" style={{ animation: 'fadeUp 0.7s ease both' }}>
-        {(
-          [
-            { key: 'active', label: `Active (${active.length})` },
-            { key: 'cancelled', label: `Cancelled (${cancelled.length})` },
-            { key: 'activity', label: 'Activity' },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`numeric rounded-full px-4 py-2 text-xs tracking-[0.04em] transition ${
-              tab === t.key
-                ? 'border border-mint/40 bg-mint-deep text-mint'
-                : 'border border-line text-ink-muted hover:text-ink'
-            }`}
+      {/* header row: state filters left, activity apart on the right */}
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3" style={{ animation: 'fadeUp 0.7s ease both' }}>
+        <div className="flex items-center gap-2">
+          {(
+            [
+              { key: 'active', label: `Active (${active.length})` },
+              { key: 'cancelled', label: `Cancelled (${cancelled.length})` },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setFilter(t.key)}
+              className={`numeric rounded-full px-4 py-2 text-xs tracking-[0.04em] transition ${
+                filter === t.key && !activityOpen
+                  ? 'border border-mint/40 bg-mint-deep text-mint'
+                  : 'border border-line text-ink-muted hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => setActivityOpen((o) => !o)}
+          className={`numeric flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.04em] transition ${
+            activityOpen
+              ? 'border border-violet/50 bg-violet/15 text-violet-light'
+              : 'border border-line text-ink-muted hover:text-ink'
+          }`}
+          aria-expanded={activityOpen}
+        >
+          Activity
+          <svg
+            width="9"
+            height="6"
+            viewBox="0 0 9 6"
+            className={`transition-transform duration-300 ${activityOpen ? 'rotate-180' : ''}`}
           >
-            {t.label}
-          </button>
-        ))}
+            <path d="M1 1 L4.5 4.5 L8 1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </button>
       </div>
 
-      {error && tab !== 'activity' && <p className="text-sm text-danger">{error}</p>}
-
-      {/* ── activity view — payment history takes over the list ── */}
-      {tab === 'activity' && (
-        <div style={{ animation: 'fadeUp 0.5s ease both' }}>
+      {/* ── activity takeover ─────────────────────────────────── */}
+      {activityOpen && (
+        <div style={{ animation: 'fadeUp 0.45s ease both' }}>
           <div className="mb-4 flex items-center gap-2">
             <span className="numeric rounded-full border border-line px-2 py-0.5 text-[9px] tracking-[0.14em] text-ink-faint">
               PREVIEW
@@ -113,70 +134,74 @@ function SubscriptionsView() {
         </div>
       )}
 
-      {tab !== 'activity' && !loading && !error && shown.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-line bg-surface/50 p-10 text-center">
-          <p className="text-sm text-ink-muted">
-            {tab === 'active' ? 'Nothing recurring yet.' : 'Nothing cancelled — good.'}
-          </p>
-        </div>
-      )}
+      {/* ── the cadences — each subscription wears its ring ───── */}
+      {!activityOpen && (
+        <>
+          {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
-      <ul className="space-y-3" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
-        {shown.map((sub) => {
-          const plan = plans.get(sub.planId);
-          const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
-          return (
-            <li
-              key={sub.id}
-              className="group relative flex items-center gap-5 overflow-hidden rounded-2xl border border-line bg-surface/75 p-5 backdrop-blur-xl transition hover:border-[#282c39] hover:bg-surface-2"
+          {!loading && !error && shown.length === 0 && (
+            <div
+              className="rounded-2xl border border-dashed border-line bg-surface/50 p-12 text-center"
+              style={{ animation: 'fadeUp 0.7s ease both 0.1s' }}
             >
-              <div className="relative">
-                <CadenceRing progress={sub.active ? progress : 0} size={52} />
-                {sub.active && (
-                  <span
-                    className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-mint"
-                    style={{ boxShadow: '0 0 8px var(--mint)' }}
-                  />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[15px] font-medium text-ink">
-                  {plan ? (
-                    <>
-                      <span className="numeric">{formatUSDC(plan.amount)} USDC</span>
-                      <span className="text-ink-muted"> / {intervalLabel(plan.intervalSecs)}</span>
-                    </>
-                  ) : (
-                    `Plan #${sub.planId}`
+              <p className="text-sm text-ink-muted">
+                {filter === 'active' ? 'Nothing recurring yet.' : 'Nothing cancelled — good.'}
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" style={{ animation: 'fadeUp 0.7s ease both 0.1s' }}>
+            {shown.map((sub) => {
+              const plan = plans.get(sub.planId);
+              const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+              return (
+                <GlassCard
+                  key={sub.id}
+                  hairline={sub.active}
+                  className={`flex flex-col items-center p-6 text-center transition-all duration-300 hover:-translate-y-1 ${
+                    sub.active ? 'hover:shadow-[0_0_32px_-14px_var(--mint)]' : 'opacity-70'
+                  }`}
+                >
+                  {/* the ring is the face — amount lives inside it */}
+                  <div className="relative">
+                    <CadenceRing progress={sub.active ? progress : 0} size={104} strokeWidth={3.5} breathing={sub.active} />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="numeric text-lg font-semibold leading-none text-ink">
+                        {plan ? formatUSDC(plan.amount) : `#${sub.planId}`}
+                      </p>
+                      <p className="numeric mt-1 text-[9px] uppercase tracking-[0.14em] text-ink-faint">USDC</p>
+                    </div>
+                  </div>
+
+                  <p className="numeric mt-4 text-xs text-ink-muted">
+                    {plan ? `every ${intervalLabel(plan.intervalSecs)}` : 'plan details unavailable'}
+                  </p>
+                  {plan && (
+                    <p className="numeric mt-1 text-[11px] text-ink-faint">to {shortAddress(plan.merchant)}</p>
                   )}
-                </p>
-                <p className="mt-1 text-xs text-ink-muted">
-                  {sub.active ? (
-                    <>
-                      next charge <span className="numeric text-ink-muted">{timeUntil(sub.nextPaymentDue)}</span>
-                      {plan && (
-                        <span className="text-ink-faint">
-                          {' '}
-                          · max exposure {formatUSDC(plan.amount)} USDC
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    'cancelled — history kept'
-                  )}
-                </p>
-              </div>
-              <span
-                className={`shrink-0 rounded-full px-3 py-1 text-xs ${
-                  sub.active ? 'bg-mint-deep text-mint' : 'border border-line text-ink-faint'
-                }`}
-              >
-                {sub.active ? 'Active' : 'Ended'}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+
+                  <div className="mt-4 w-full border-t border-line pt-3">
+                    {sub.active ? (
+                      <>
+                        <p className="text-xs text-ink-muted">
+                          next charge <span className="numeric text-ink">{timeUntil(sub.nextPaymentDue)}</span>
+                        </p>
+                        {plan && (
+                          <p className="mt-1 text-[11px] text-ink-faint">
+                            max exposure {formatUSDC(plan.amount)} USDC
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-ink-faint">cancelled — history kept</p>
+                    )}
+                  </div>
+                </GlassCard>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
