@@ -73,6 +73,36 @@ input:autofill {
   font-variant-numeric: tabular-nums;
 }
 
+/* The shared entrance — everything arrives the same way, everywhere. */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Atmosphere shell — an expanding ring that fades as it grows, the same
+   move as the landing planets' pulse. Applied to absolutely-positioned
+   rings around a central body (the vault door). */
+@keyframes shellWave {
+  0% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
 /* The breathing of the pulse — slow, subtle, alive. Used sparingly. */
 @keyframes breathe {
   0%,
