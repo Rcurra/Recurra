@@ -1,11 +1,12 @@
 'use client';
 
+import { formatUSDC } from '@/lib/format';
 import { VaultDoor } from './VaultDoor';
 
 // The one elevated panel on the dashboard — every other panel is dark
 // glass; the vault wears the gradient. Balance + the door, one tap target
 // for the modal.
-export function VaultPanel({ onOpen }: { onOpen: () => void }) {
+export function VaultPanel({ onOpen, balance }: { onOpen: () => void; balance: bigint | null }) {
   return (
     <button
       onClick={onOpen}
@@ -29,7 +30,16 @@ export function VaultPanel({ onOpen }: { onOpen: () => void }) {
       </div>
 
       <p className="numeric mt-3 text-3xl font-semibold text-ink">
-        —<span className="text-base text-ink-faint">.—— USDC</span>
+        {balance === null ? (
+          <>
+            —<span className="text-base text-ink-faint">.—— USDC</span>
+          </>
+        ) : (
+          <>
+            {formatUSDC(balance).split('.')[0]}
+            <span className="text-base text-ink-faint">.{formatUSDC(balance).split('.')[1]} USDC</span>
+          </>
+        )}
       </p>
       <p className="mt-1 text-[11px] text-ink-muted">escrow — always yours, withdraw anytime</p>
 

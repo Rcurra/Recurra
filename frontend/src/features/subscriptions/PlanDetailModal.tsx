@@ -1,17 +1,33 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
 import { MerchantMark } from '@/components/MerchantMark';
+import { useAuth } from '@/features/auth';
 import type { Plan } from '@/types';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
+import { approveAndDeposit, subscribe, walletErrorMessage } from '@/lib/wallet';
 
 const MONTH_SECS = 2_592_000;
+const RUNWAY_OPTIONS = [3, 6, 12] as const;
+
+type Phase = 'idle' | 'subscribe' | 'approve' | 'deposit' | 'done' | 'error';
 
 // One plan, open — the merchant's planet center stage, the numbers the
-// chain actually knows, and what subscribing will mean when F3/F4 land:
-// fund once, sign once, bounded exposure forever.
-export function PlanDetailModal({ plan, onClose }: { plan: Plan | null; onClose: () => void }) {
+// chain actually knows, and the real three beats: pick plan (already
+// done, by opening this) -> set runway -> sign. F3 is dev-mode direct
+// writes, so "one signature" is still 2-3 real ones here (subscribe,
+// approve, deposit) -- F4's ZeroDev batching is what actually collapses
+// them into one UserOp. The step counter below is that stub, honestly.
+export function PlanDetailModal({
+  plan,
+  onClose,
+  onSubscribed,
+}: {
+  plan: Plan | null;
+  onClose: () => void;
+  onSubscribed?: () => void;
+}) {
   const open = plan !== null;
 
   useEffect(() => {
@@ -27,8 +43,53 @@ export function PlanDetailModal({ plan, onClose }: { plan: Plan | null; onClose:
 
   if (!plan) return null;
 
+  // Keyed by plan id so all of this resets on a fresh plan instead of a
+  // set-state-in-effect to clear it.
+  return <PlanDetailContent key={plan.id} plan={plan} onClose={onClose} onSubscribed={onSubscribed} />;
+}
+
+function PlanDetailContent({
+  plan,
+  onClose,
+  onSubscribed,
+}: {
+  plan: Plan;
+  onClose: () => void;
+  onSubscribed?: () => void;
+}) {
+  const { address } = useAuth();
+  const [months, setMonths] = useState<(typeof RUNWAY_OPTIONS)[number]>(3);
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [error, setError] = useState<string | null>(null);
+  // Tracked so a retry after a funding failure doesn't call subscribe()
+  // again -- that would revert AlreadySubscribed since it already went
+  // through.
+  const [subId, setSubId] = useState<number | null>(null);
+
   const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
   const isMonthly = plan.intervalSecs === MONTH_SECS;
+  const fundAmount = monthly * BigInt(months);
+  const signing = phase === 'subscribe' || phase === 'approve' || phase === 'deposit';
+
+  async function handleSubscribe() {
+    if (!address) return;
+    setError(null);
+    try {
+      let currentSubId = subId;
+      if (currentSubId === null) {
+        setPhase('subscribe');
+        currentSubId = await subscribe(address, plan.id);
+        setSubId(currentSubId);
+      }
+      await approveAndDeposit(address, fundAmount, setPhase);
+      setPhase('done');
+      onSubscribed?.();
+      setTimeout(onClose, 1100);
+    } catch (e) {
+      setError(walletErrorMessage(e));
+      setPhase('error');
+    }
+  }
 
   return (
     <div
@@ -98,33 +159,70 @@ export function PlanDetailModal({ plan, onClose }: { plan: Plan | null; onClose:
                 })()}
               </div>
 
-              {/* what subscribing means — the pitch, kept honest */}
-              <div className="mt-5 space-y-2.5">
-                {[
-                  { n: '1', text: 'Fund your vault once — the money stays yours, withdrawable to the cent.' },
-                  { n: '2', text: 'Sign once — a scoped key approves this cadence, nothing else.' },
-                  { n: '3', text: 'Payments run themselves — the contract verifies every single one.' },
-                ].map((s) => (
-                  <div key={s.n} className="flex items-start gap-3">
-                    <span className="numeric mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line text-[10px] text-ink-faint">
-                      {s.n}
-                    </span>
-                    <p className="text-xs leading-relaxed text-ink-muted">{s.text}</p>
-                  </div>
-                ))}
+              {/* ── the runway — how much goes in, said plainly ─── */}
+              <div className="mt-5">
+                <p className="numeric mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+                  Fund your vault for
+                </p>
+                <div className="flex gap-2">
+                  {RUNWAY_OPTIONS.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMonths(m)}
+                      disabled={signing || phase === 'done'}
+                      className={`flex-1 rounded-lg border px-3 py-2 text-sm transition disabled:opacity-50 ${
+                        months === m
+                          ? 'border-mint/50 bg-mint-deep text-mint'
+                          : 'border-line text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      {m} months
+                    </button>
+                  ))}
+                </div>
+
+                <p className="mt-3 text-xs leading-relaxed text-ink-muted">
+                  <span className="numeric text-ink">{formatUSDC(fundAmount)} USDC</span> goes into your
+                  vault. It stays yours — withdraw anytime. Recurra can only ever move{' '}
+                  <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span> every{' '}
+                  {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
+                </p>
               </div>
 
               <div className="mt-6 flex flex-col items-center gap-2">
                 <button
-                  disabled
-                  title="Arrives with F3 — writes go through your account"
-                  className="w-full rounded-lg bg-mint px-5 py-2.5 text-sm font-medium text-canvas opacity-40"
+                  onClick={handleSubscribe}
+                  disabled={signing || phase === 'done' || !address}
+                  className="w-full rounded-lg bg-mint px-5 py-2.5 text-sm font-medium text-canvas transition disabled:opacity-40"
                 >
-                  Subscribe
+                  {phase === 'done'
+                    ? 'Signed ✓'
+                    : phase === 'error'
+                      ? 'Try again'
+                      : phase === 'idle'
+                        ? 'Subscribe'
+                        : 'Signing…'}
                 </button>
-                <p className="text-[11px] text-ink-faint">
-                  cancel anytime — your worst case is ever only one cycle
-                </p>
+
+                {signing && (
+                  <p className="numeric text-[11px] text-ink-faint">
+                    {phase === 'subscribe' && 'Step 1 of 3 — setting up your schedule'}
+                    {phase === 'approve' && 'Step 2 of 3 — approving your vault'}
+                    {phase === 'deposit' && 'Step 3 of 3 — funding your vault'}
+                  </p>
+                )}
+                {phase === 'done' && (
+                  <p className="numeric text-[11px] text-mint">
+                    {formatUSDC(fundAmount)} USDC is in your vault.
+                  </p>
+                )}
+                {error && <p className="text-[11px] text-danger">{error}</p>}
+                {phase === 'idle' && !error && (
+                  <p className="text-[11px] text-ink-faint">
+                    cancel anytime — your worst case is ever only one cycle · 3 signatures for now, 1 once
+                    account abstraction lands
+                  </p>
+                )}
               </div>
             </div>
           </div>

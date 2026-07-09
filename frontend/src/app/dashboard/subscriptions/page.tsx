@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SubDetailModal, useSubscriptions } from '@/features/subscriptions';
 import type { Subscription } from '@/types';
@@ -37,7 +37,14 @@ function SubscriptionsView() {
   const [activityOpen, setActivityOpen] = useState(searchParams.get('tab') === 'activity');
   const [selected, setSelected] = useState<Subscription | null>(null);
 
-  const { subscriptions, loading, error } = useSubscriptions(address);
+  const { subscriptions, loading, error, refetch } = useSubscriptions(address);
+  // The charge moment: nextPaymentDue advancing between polls IS a payment
+  // having fired (markPaid runs right before debit) -- whatever triggers
+  // executePayment (a terminal cast call today, Henry's scheduler once it
+  // lands), this detection doesn't change.
+  const prevDueRef = useRef<Map<number, number>>(new Map());
+  const [justCharged, setJustCharged] = useState<Set<number>>(new Set());
+  const [chargeToasts, setChargeToasts] = useState<{ id: number; sub: Subscription }[]>([]);
 
   useEffect(() => {
     api.plans
@@ -45,6 +52,48 @@ function SubscriptionsView() {
       .then((list) => setPlans(new Map(list.map((p) => [p.id, p]))))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const prev = prevDueRef.current;
+    const next = new Map<number, number>();
+    const charged: Subscription[] = [];
+    for (const s of subscriptions) {
+      const dueMs = s.nextPaymentDue.getTime();
+      next.set(s.id, dueMs);
+      const prevMs = prev.get(s.id);
+      if (prevMs !== undefined && dueMs > prevMs) charged.push(s);
+    }
+    prevDueRef.current = next;
+    if (charged.length === 0) return;
+
+    // Deferred a tick (react-hooks/set-state-in-effect) -- same reasoning
+    // as useSubscriptions' nonce-refetch: don't call setState synchronously
+    // inside the effect body.
+    setTimeout(() => {
+      setJustCharged((old) => {
+        const merged = new Set(old);
+        charged.forEach((s) => merged.add(s.id));
+        return merged;
+      });
+      charged.forEach((s) => {
+        const toastId = Date.now() + s.id;
+        setChargeToasts((old) => [...old, { id: toastId, sub: s }]);
+        setTimeout(() => {
+          setChargeToasts((old) => old.filter((t) => t.id !== toastId));
+        }, 5000);
+      });
+    }, 0);
+
+    charged.forEach((s) => {
+      setTimeout(() => {
+        setJustCharged((old) => {
+          const copy = new Set(old);
+          copy.delete(s.id);
+          return copy;
+        });
+      }, 4500);
+    });
+  }, [subscriptions]);
 
   // Two subscription states only — the contracts don't have a "finished"
   // subscription, just active (renews every cycle) and cancelled
@@ -55,6 +104,28 @@ function SubscriptionsView() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
+      {/* ── the pulse, given a body: a charge just fired ────────── */}
+      {chargeToasts.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-2">
+          {chargeToasts.map((t) => {
+            const plan = plans.get(t.sub.planId);
+            return (
+              <div
+                key={t.id}
+                className="flex items-center gap-3 rounded-xl border border-mint/40 bg-surface/90 px-4 py-3 shadow-[0_0_20px_-8px_var(--mint)] backdrop-blur-xl"
+                style={{ animation: 'fadeUp 0.35s ease both' }}
+              >
+                <span className="h-2 w-2 shrink-0 rounded-full bg-mint" style={{ boxShadow: '0 0 8px var(--mint)' }} />
+                <p className="numeric text-xs text-ink">
+                  Charged {plan ? `${formatUSDC(plan.amount)} USDC` : 'a payment'}
+                  {plan && <span className="text-ink-muted"> → {shortAddress(plan.merchant)}</span>}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* header row: state filters left, activity apart on the right */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3" style={{ animation: 'fadeUp 0.7s ease both' }}>
         <div className="flex items-center gap-2">
@@ -160,12 +231,24 @@ function SubscriptionsView() {
                 <button key={sub.id} onClick={() => setSelected(sub)} aria-haspopup="dialog" className="block text-left">
                 <GlassCard
                   hairline={sub.active}
-                  className={`flex h-full flex-col items-center p-6 text-center transition-all duration-300 hover:-translate-y-1 ${
-                    sub.active ? 'hover:shadow-[0_0_14px_-10px_var(--mint)]' : 'opacity-70'
+                  className={`flex h-full flex-col items-center p-6 text-center transition-all duration-700 hover:-translate-y-1 ${
+                    justCharged.has(sub.id)
+                      ? 'border-mint/60 shadow-[0_0_28px_-8px_var(--mint)]'
+                      : sub.active
+                        ? 'hover:shadow-[0_0_14px_-10px_var(--mint)]'
+                        : 'opacity-70'
                   }`}
                 >
                   {/* the ring is the face — amount lives inside it */}
                   <div className="relative">
+                    {justCharged.has(sub.id) &&
+                      [0, 1].map((i) => (
+                        <div
+                          key={i}
+                          className="absolute inset-0 rounded-full border border-mint/50"
+                          style={{ animation: `shellWave ${1.4 + i * 0.5}s ease-out ${i * 0.15}s` }}
+                        />
+                      ))}
                     <CadenceRing progress={sub.active ? progress : 0} size={104} strokeWidth={3.5} breathing={sub.active} />
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <p className="numeric text-lg font-semibold leading-none text-ink">
@@ -210,6 +293,7 @@ function SubscriptionsView() {
         sub={selected}
         plan={selected ? (plans.get(selected.planId) ?? null) : null}
         onClose={() => setSelected(null)}
+        onCancelled={refetch}
       />
     </div>
   );
