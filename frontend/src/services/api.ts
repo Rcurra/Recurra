@@ -7,7 +7,10 @@ import type { Plan, Subscription } from '@/types';
 // 2. Boundary translation: the backend emits snake_case JSON with string
 //    amounts and ISO timestamps; app code receives camelCase, bigint, Date.
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+// Same-origin by default — next.config.ts proxies /api/* to the backend,
+// which sidesteps CORS entirely (the Rust API has no CORS layer, and the
+// browser blocks cross-port fetches curl happily allows).
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 // Wire shapes — mirror backend/src/models/mod.rs exactly. Touch only in
 // lockstep with a backend model change.
