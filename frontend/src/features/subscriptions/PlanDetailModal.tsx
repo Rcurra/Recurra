@@ -142,12 +142,14 @@ function PlanDetailContent({
                 })()}
               </div>
 
-              {/* what subscribing means — the pitch, kept honest */}
+              {/* what subscribing means — the pitch, kept honest: this
+                  button only signs the schedule, it moves no money (that's
+                  a separate trip to the vault) */}
               <div className="mt-5 space-y-2.5">
                 {[
-                  { n: '1', text: 'Fund your vault once — the money stays yours, withdrawable to the cent.' },
-                  { n: '2', text: 'Sign once — a scoped key approves this cadence, nothing else.' },
-                  { n: '3', text: 'Payments run themselves — the contract verifies every single one.' },
+                  { n: '1', text: 'Sign once — this sets up the schedule. No money moves yet.' },
+                  { n: '2', text: 'Fund your vault whenever — from Overview, before the next charge is due.' },
+                  { n: '3', text: 'From then on, payments run themselves — the contract verifies every one.' },
                 ].map((s) => (
                   <div key={s.n} className="flex items-start gap-3">
                     <span className="numeric mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line text-[10px] text-ink-faint">
