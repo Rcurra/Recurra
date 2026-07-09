@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useAuth, AccountChip } from '@/features/auth';
 import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
-import { Ambient } from '@/components/Ambient';
 import { RouteTransition } from '@/components/RouteTransition';
 
 const NAV_ITEMS = [
@@ -51,16 +50,22 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="relative min-h-screen bg-canvas">
-      <Ambient />
+      {/* the same universe as landing/login — one design system everywhere.
+          Fixed wrapper (like the landing's) so the stars hold still while
+          content scrolls, and drifting planets can't widen the page. */}
+      <div className="pointer-events-none fixed inset-0" aria-hidden>
+        <Starfield />
+      </div>
 
-      <header className="sticky top-0 z-20 border-b border-line bg-surface/70 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-6 py-4">
+      {/* floating glass pill, same language as the landing/login nav */}
+      <header className="sticky top-4 z-20 flex justify-center px-4">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-full border border-line bg-surface/75 px-5 py-2.5 backdrop-blur-xl">
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
             <LogoMark />
             <span className="numeric text-sm font-semibold tracking-[0.12em] text-ink">RECURRA</span>
           </Link>
 
-          <nav className="flex flex-1 items-center justify-center gap-1">
+          <nav className="flex flex-wrap items-center justify-center gap-1">
             {NAV_ITEMS.map((item) => {
               const active = pathname === item.href;
               return (
