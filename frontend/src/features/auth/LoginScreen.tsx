@@ -49,8 +49,6 @@ export function LoginScreen() {
       </Link>
 
       <div className="relative z-10 w-full max-w-sm">
-        <style>{`@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-
         <div
           className="relative overflow-hidden rounded-2xl border border-line bg-surface/75 p-8 backdrop-blur-xl"
           style={{ animation: 'fadeUp 0.7s ease both' }}

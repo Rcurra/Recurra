@@ -76,8 +76,8 @@ export default function LandingPage() {
         position: 'relative',
       }}
     >
+      {/* fadeUp comes from globals.css — shared with login + the app shell */}
       <style>{`
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes starTwinkle { 0%,100% { opacity: 0.2; } 50% { opacity: 0.6; } }
         @keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(22px,-30px); } }
         @keyframes planetGlow { 0%,100% { opacity: 0.26; } 50% { opacity: 0.46; } }

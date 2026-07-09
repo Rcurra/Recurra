@@ -73,6 +73,18 @@ input:autofill {
   font-variant-numeric: tabular-nums;
 }
 
+/* The shared entrance — everything arrives the same way, everywhere. */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* The breathing of the pulse — slow, subtle, alive. Used sparingly. */
 @keyframes breathe {
   0%,
