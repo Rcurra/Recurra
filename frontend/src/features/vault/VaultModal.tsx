@@ -76,6 +76,7 @@ function VaultModalContent({
     setActionError(null);
     try {
       await approveAndDeposit(address, amountUnits);
+      setAmount('');
       onChanged();
     } catch (e) {
       setActionError(walletErrorMessage(e));
@@ -84,16 +85,16 @@ function VaultModalContent({
     }
   }
 
-  // Withdraw deliberately does NOT clear/reset amount on its own (neither
-  // does deposit, above) — a shared amount field that vanished after one
-  // action made the other action look broken (silently disabled, no
-  // explanation) the first time a real user hit it.
+  // Clears on success, same as deposit — safe now that a disabled button
+  // always says why (title + the caption below), instead of silently
+  // doing nothing the way it did the first time a real user hit this.
   async function handleWithdraw() {
     if (!address || amountUnits === null) return;
     setBusy('withdraw');
     setActionError(null);
     try {
       await withdraw(address, amountUnits);
+      setAmount('');
       onChanged();
     } catch (e) {
       setActionError(walletErrorMessage(e));
