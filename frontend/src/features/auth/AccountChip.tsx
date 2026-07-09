@@ -1,26 +1,24 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { shortAddress } from '@/lib/format';
 import { useAuth } from './AuthContext';
 
-// The dashboard header's address pill — doubles as the logout control.
+// The header's address pill — identity display, linking to Settings
+// (where logout lives). Not a logout button itself; one accidental
+// mis-click shouldn't end a session.
 export function AccountChip() {
-  const { address, logout } = useAuth();
-  const router = useRouter();
+  const { address } = useAuth();
 
   if (!address) return null;
 
   return (
-    <button
-      onClick={async () => {
-        await logout();
-        router.push('/');
-      }}
-      title="Log out"
-      className="numeric rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-muted transition hover:border-danger/40 hover:text-danger"
+    <Link
+      href="/dashboard/settings"
+      title="Account settings"
+      className="numeric rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-muted transition hover:text-ink"
     >
       {shortAddress(address)}
-    </button>
+    </Link>
   );
 }

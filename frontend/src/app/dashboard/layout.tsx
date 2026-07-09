@@ -8,11 +8,12 @@ import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
 import { RouteTransition } from '@/components/RouteTransition';
 
+// Four tabs — Activity lives inside Subscriptions now, and logout lives
+// in Settings, so the nav stays a short pill.
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Overview' },
   { href: '/dashboard/subscriptions', label: 'Subscriptions' },
   { href: '/dashboard/discover', label: 'Discover' },
-  { href: '/dashboard/activity', label: 'Activity' },
   { href: '/dashboard/settings', label: 'Settings' },
 ] as const;
 
