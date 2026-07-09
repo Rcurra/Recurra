@@ -37,7 +37,7 @@ function SubscriptionsView() {
   const [activityOpen, setActivityOpen] = useState(searchParams.get('tab') === 'activity');
   const [selected, setSelected] = useState<Subscription | null>(null);
 
-  const { subscriptions, loading, error } = useSubscriptions(address);
+  const { subscriptions, loading, error, refetch } = useSubscriptions(address);
 
   useEffect(() => {
     api.plans
@@ -210,6 +210,7 @@ function SubscriptionsView() {
         sub={selected}
         plan={selected ? (plans.get(selected.planId) ?? null) : null}
         onClose={() => setSelected(null)}
+        onCancelled={refetch}
       />
     </div>
   );

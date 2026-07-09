@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
 import { CadenceRing } from '@/components/CadenceRing';
+import { useAuth } from '@/features/auth';
 import type { Plan, Subscription } from '@/types';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
+import { unsubscribe, walletErrorMessage } from '@/lib/wallet';
 
 // The live countdown — the pulse made visible. Ticks every second toward
 // nextPaymentDue; this is real chain state, not decoration.
@@ -32,10 +34,12 @@ export function SubDetailModal({
   sub,
   plan,
   onClose,
+  onCancelled,
 }: {
   sub: Subscription | null;
   plan: Plan | null;
   onClose: () => void;
+  onCancelled?: () => void;
 }) {
   const open = sub !== null;
 
@@ -52,7 +56,7 @@ export function SubDetailModal({
 
   if (!sub) return null;
 
-  return <SubDetailContent sub={sub} plan={plan} onClose={onClose} />;
+  return <SubDetailContent sub={sub} plan={plan} onClose={onClose} onCancelled={onCancelled} />;
 }
 
 // Split so the countdown hook only runs while a subscription is open.
@@ -60,13 +64,35 @@ function SubDetailContent({
   sub,
   plan,
   onClose,
+  onCancelled,
 }: {
   sub: Subscription;
   plan: Plan | null;
   onClose: () => void;
+  onCancelled?: () => void;
 }) {
   const countdown = useCountdown(sub.nextPaymentDue);
   const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+  const { address } = useAuth();
+  const [confirming, setConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  async function handleCancel() {
+    if (!address) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      await unsubscribe(address, sub.id);
+      onCancelled?.();
+      onClose();
+    } catch (e) {
+      setCancelError(walletErrorMessage(e));
+      setConfirming(false);
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <div
@@ -165,18 +191,42 @@ function SubDetailContent({
               </div>
 
               {/* the way out — always visible, per the invariant */}
-              <div className="mt-5 flex flex-col items-center gap-2">
-                <button
-                  disabled
-                  title="Arrives with F3 — one click, no merchant approval needed"
-                  className="w-full rounded-lg border border-line px-5 py-2.5 text-sm text-ink opacity-40"
-                >
-                  Cancel subscription
-                </button>
-                <p className="text-[11px] text-ink-faint">
-                  your escrow stays yours — withdraw anytime, even mid-cycle
-                </p>
-              </div>
+              {sub.active && (
+                <div className="mt-5 flex flex-col items-center gap-2">
+                  {confirming ? (
+                    <div className="flex w-full gap-2">
+                      <button
+                        onClick={handleCancel}
+                        disabled={cancelling}
+                        className="flex-1 rounded-lg bg-danger px-5 py-2.5 text-sm font-medium text-canvas transition disabled:opacity-40"
+                      >
+                        {cancelling ? 'Cancelling…' : 'Yes, cancel'}
+                      </button>
+                      <button
+                        onClick={() => setConfirming(false)}
+                        disabled={cancelling}
+                        className="flex-1 rounded-lg border border-line px-5 py-2.5 text-sm text-ink transition disabled:opacity-40"
+                      >
+                        Nevermind
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirming(true)}
+                      className="w-full rounded-lg border border-line px-5 py-2.5 text-sm text-ink transition hover:border-danger/40 hover:text-danger"
+                    >
+                      Cancel subscription
+                    </button>
+                  )}
+                  {cancelError ? (
+                    <p className="text-[11px] text-danger">{cancelError}</p>
+                  ) : (
+                    <p className="text-[11px] text-ink-faint">
+                      your escrow stays yours — withdraw anytime, even mid-cycle
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </GlassCard>

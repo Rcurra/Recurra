@@ -1,17 +1,28 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
 import { MerchantMark } from '@/components/MerchantMark';
+import { useAuth } from '@/features/auth';
 import type { Plan } from '@/types';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
+import { subscribe, walletErrorMessage } from '@/lib/wallet';
 
 const MONTH_SECS = 2_592_000;
 
 // One plan, open — the merchant's planet center stage, the numbers the
-// chain actually knows, and what subscribing will mean when F3/F4 land:
-// fund once, sign once, bounded exposure forever.
-export function PlanDetailModal({ plan, onClose }: { plan: Plan | null; onClose: () => void }) {
+// chain actually knows, and what subscribing means: fund once, sign once,
+// bounded exposure forever. The runway slider (F3's three-beat flow) is
+// still ahead — this signs the subscribe() call directly, one signature.
+export function PlanDetailModal({
+  plan,
+  onClose,
+  onSubscribed,
+}: {
+  plan: Plan | null;
+  onClose: () => void;
+  onSubscribed?: () => void;
+}) {
   const open = plan !== null;
 
   useEffect(() => {
@@ -27,8 +38,41 @@ export function PlanDetailModal({ plan, onClose }: { plan: Plan | null; onClose:
 
   if (!plan) return null;
 
+  // Keyed by plan id so subscribe/error state resets on a fresh plan
+  // instead of a set-state-in-effect to clear it.
+  return <PlanDetailContent key={plan.id} plan={plan} onClose={onClose} onSubscribed={onSubscribed} />;
+}
+
+function PlanDetailContent({
+  plan,
+  onClose,
+  onSubscribed,
+}: {
+  plan: Plan;
+  onClose: () => void;
+  onSubscribed?: () => void;
+}) {
+  const { address } = useAuth();
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribeError, setSubscribeError] = useState<string | null>(null);
+
   const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
   const isMonthly = plan.intervalSecs === MONTH_SECS;
+
+  async function handleSubscribe() {
+    if (!address) return;
+    setSubscribing(true);
+    setSubscribeError(null);
+    try {
+      await subscribe(address, plan.id);
+      onSubscribed?.();
+      onClose();
+    } catch (e) {
+      setSubscribeError(walletErrorMessage(e));
+    } finally {
+      setSubscribing(false);
+    }
+  }
 
   return (
     <div
@@ -116,15 +160,19 @@ export function PlanDetailModal({ plan, onClose }: { plan: Plan | null; onClose:
 
               <div className="mt-6 flex flex-col items-center gap-2">
                 <button
-                  disabled
-                  title="Arrives with F3 — writes go through your account"
-                  className="w-full rounded-lg bg-mint px-5 py-2.5 text-sm font-medium text-canvas opacity-40"
+                  onClick={handleSubscribe}
+                  disabled={subscribing || !address}
+                  className="w-full rounded-lg bg-mint px-5 py-2.5 text-sm font-medium text-canvas transition disabled:opacity-40"
                 >
-                  Subscribe
+                  {subscribing ? 'Signing…' : 'Subscribe'}
                 </button>
-                <p className="text-[11px] text-ink-faint">
-                  cancel anytime — your worst case is ever only one cycle
-                </p>
+                {subscribeError ? (
+                  <p className="text-[11px] text-danger">{subscribeError}</p>
+                ) : (
+                  <p className="text-[11px] text-ink-faint">
+                    cancel anytime — your worst case is ever only one cycle
+                  </p>
+                )}
               </div>
             </div>
           </div>

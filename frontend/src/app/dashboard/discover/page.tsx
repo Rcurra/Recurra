@@ -110,13 +110,9 @@ export default function DiscoverPage() {
                     </div>
 
                     {/* span, not button — this whole card is already a
-                        button, and the action is F3-disabled anyway */}
-                    <span
-                      aria-disabled
-                      title="Arrives with F3 — writes go through your account"
-                      className="mt-4 block w-full rounded-lg bg-mint px-4 py-2.5 text-center text-sm font-medium text-canvas opacity-40"
-                    >
-                      Subscribe
+                        button; the real Subscribe action lives in the modal */}
+                    <span className="mt-4 block w-full rounded-lg bg-mint px-4 py-2.5 text-center text-sm font-medium text-canvas transition group-hover:brightness-110">
+                      View & subscribe →
                     </span>
                   </GlassCard>
                   </button>
