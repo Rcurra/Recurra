@@ -43,6 +43,13 @@ export function cycleProgress(nextPaymentDue: Date, intervalSecs: number): numbe
   return Math.min(Math.max(1 - remainingMs / intervalMs, 0), 1);
 }
 
+// Normalize a plan's price to a 30-day month for comparison — display
+// math only, never used for a real charge (amounts come from the plan
+// on-chain, always).
+export function monthlyEquivalent(amount: bigint, intervalSecs: number): bigint {
+  return (amount * 2_592_000n) / BigInt(Math.max(intervalSecs, 1));
+}
+
 export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }

@@ -9,7 +9,7 @@ import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
-import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeUntil } from '@/lib/format';
+import { cycleProgress, formatUSDC, intervalLabel, monthlyEquivalent, shortAddress, timeUntil } from '@/lib/format';
 
 function PreviewBadge() {
   return (
@@ -41,8 +41,7 @@ export default function OverviewPage() {
   // monthly commitment across active subs — display math only
   const monthly = active.reduce((sum, s) => {
     const p = plans.get(s.planId);
-    if (!p) return sum;
-    return sum + (p.amount * 2_592_000n) / BigInt(Math.max(p.intervalSecs, 1));
+    return p ? sum + monthlyEquivalent(p.amount, p.intervalSecs) : sum;
   }, 0n);
   const nextDue = active.length
     ? active.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
