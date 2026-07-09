@@ -1,0 +1,49 @@
+# Frontend CI — typecheck, lint, unit tests, and a production build on
+# every push/PR that touches frontend/. If any of these fail locally the
+# code was already broken; this just makes sure it can't land quietly.
+#
+# npm install (not ci): the scaffold gitignores package-lock.json, so
+# there's no lockfile to restore from. If we ever commit the lockfile,
+# switch to `npm ci` + setup-node's npm cache for faster, pinned runs.
+name: frontend
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-ci.yml"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install
+
+      - name: Env for build
+        run: cp .env.local.example .env.local
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
