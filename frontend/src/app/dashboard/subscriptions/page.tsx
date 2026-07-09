@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
@@ -13,10 +14,25 @@ import { MOCK_RECEIPTS } from '@/lib/mockData';
 // takes over the list area with the payment history.
 type Tab = 'active' | 'cancelled' | 'activity';
 
+// useSearchParams needs a Suspense boundary above it (Next requirement);
+// the page is the boundary, the view is the content.
 export default function SubscriptionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SubscriptionsView />
+    </Suspense>
+  );
+}
+
+function SubscriptionsView() {
   const { address } = useAuth();
+  const searchParams = useSearchParams();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
-  const [tab, setTab] = useState<Tab>('active');
+  // The old /dashboard/activity route redirects here with ?tab=activity.
+  // useSearchParams (not window.location) — during a client-side redirect
+  // the component can mount before the window URL updates; the router's
+  // own params are correct for the route being rendered.
+  const [tab, setTab] = useState<Tab>(searchParams.get('tab') === 'activity' ? 'activity' : 'active');
 
   const { subscriptions, loading, error } = useSubscriptions(address);
 
