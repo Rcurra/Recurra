@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useSubscriptions } from '@/features/subscriptions';
+import { SubDetailModal, useSubscriptions } from '@/features/subscriptions';
+import type { Subscription } from '@/types';
 import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
@@ -34,6 +35,7 @@ function SubscriptionsView() {
   // window.location — a client-side redirect can mount this component
   // before the window URL updates).
   const [activityOpen, setActivityOpen] = useState(searchParams.get('tab') === 'activity');
+  const [selected, setSelected] = useState<Subscription | null>(null);
 
   const { subscriptions, loading, error } = useSubscriptions(address);
 
@@ -155,11 +157,11 @@ function SubscriptionsView() {
               const plan = plans.get(sub.planId);
               const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
               return (
+                <button key={sub.id} onClick={() => setSelected(sub)} aria-haspopup="dialog" className="block text-left">
                 <GlassCard
-                  key={sub.id}
                   hairline={sub.active}
-                  className={`flex flex-col items-center p-6 text-center transition-all duration-300 hover:-translate-y-1 ${
-                    sub.active ? 'hover:shadow-[0_0_32px_-14px_var(--mint)]' : 'opacity-70'
+                  className={`flex h-full flex-col items-center p-6 text-center transition-all duration-300 hover:-translate-y-1 ${
+                    sub.active ? 'hover:shadow-[0_0_14px_-10px_var(--mint)]' : 'opacity-70'
                   }`}
                 >
                   {/* the ring is the face — amount lives inside it */}
@@ -197,11 +199,18 @@ function SubscriptionsView() {
                     )}
                   </div>
                 </GlassCard>
+                </button>
               );
             })}
           </div>
         </>
       )}
+
+      <SubDetailModal
+        sub={selected}
+        plan={selected ? (plans.get(selected.planId) ?? null) : null}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }
