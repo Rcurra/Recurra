@@ -1,69 +1,16 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
-import { VaultHero, VaultModal } from '@/features/vault';
+import { EscrowChart, VaultModal, VaultPanel } from '@/features/vault';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
-import { cycleProgress, formatUSDC, intervalLabel, timeUntil } from '@/lib/format';
+import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeAgo, timeUntil } from '@/lib/format';
 import { MOCK_RECEIPTS } from '@/lib/mockData';
-
-const PREVIEW_SIZE = 2;
-
-// Section cards under the vault: an accent dot names the section's color,
-// one big lead number carries the glance, mini rows fill in detail, and
-// hover lifts the card with a soft glow in its own accent — alive like
-// the landing's planets, not a static box.
-function SectionCard({
-  title,
-  href,
-  accent,
-  lead,
-  leadLabel,
-  badge,
-  children,
-}: {
-  title: string;
-  href: string;
-  accent: string; // CSS color — the section's hue
-  lead: string;
-  leadLabel: string;
-  badge?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <Link href={href} className="group block">
-      <GlassCard
-        hairline
-        className="flex h-full flex-col p-5 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-[#282c39]"
-        style={{ transitionProperty: 'transform, border-color, box-shadow' }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: accent, boxShadow: `0 0 6px ${accent}` }}
-            />
-            <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">{title}</p>
-          </div>
-          <span className="numeric shrink-0 whitespace-nowrap text-[11px] text-ink-muted transition group-hover:text-ink">
-            View all →
-          </span>
-        </div>
-        {badge ? <div className="mt-2">{badge}</div> : null}
-
-        <p className="numeric mt-4 text-2xl font-semibold text-ink">{lead}</p>
-        <p className="text-[11px] text-ink-faint">{leadLabel}</p>
-
-        {children ? <div className="mt-4">{children}</div> : null}
-      </GlassCard>
-    </Link>
-  );
-}
 
 function PreviewBadge() {
   return (
@@ -73,6 +20,9 @@ function PreviewBadge() {
   );
 }
 
+// Bento overview — asymmetric panels, one gradient-elevated (the vault),
+// the cadence rings doing sparkline duty in the subscriptions table, and
+// an always-visible action rail. The reference density, in our universe.
 export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
@@ -84,7 +34,7 @@ export default function OverviewPage() {
     api.plans
       .list()
       .then((list) => setPlans(new Map(list.map((p) => [p.id, p]))))
-      .catch(() => {}); // cards degrade gracefully without plan detail
+      .catch(() => {}); // panels degrade gracefully without plan detail
   }, []);
 
   const active = subscriptions.filter((s) => s.active);
@@ -97,76 +47,152 @@ export default function OverviewPage() {
   const nextDue = active.length
     ? active.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
     : null;
-  const subsPreview = [...active]
+  const tableRows = [...active]
     .sort((a, b) => a.nextPaymentDue.getTime() - b.nextPaymentDue.getTime())
-    .slice(0, PREVIEW_SIZE);
-  const plansPreview = Array.from(plans.values()).slice(0, PREVIEW_SIZE);
+    .slice(0, 4);
   const latestReceipt = MOCK_RECEIPTS[0];
 
   return (
-    <div className="mx-auto max-w-3xl px-6 pt-6 pb-10">
-      {error && <p className="mb-2 text-center text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
+    <div className="mx-auto max-w-4xl px-6 pt-8 pb-10">
+      {/* greeting */}
+      <p className="numeric mb-4 text-sm text-ink-muted" style={{ animation: 'fadeUp 0.7s ease both' }}>
+        Hi {address ? shortAddress(address) : 'there'} <span aria-hidden>👋</span>
+      </p>
 
-      {/* ── the sun: the vault, centered, everything else beneath it ── */}
-      <div className="flex justify-center" style={{ animation: 'fadeUp 0.7s ease both' }}>
-        <VaultHero onOpen={() => setVaultOpen(true)} />
-      </div>
+      {error && <p className="mb-3 text-sm text-danger">{error}</p>}
 
-      {/* ── the sections, in orbit below ─────────────────────── */}
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3" style={{ animation: 'fadeUp 0.7s ease both 0.15s' }}>
-        <SectionCard
-          title="Subscriptions"
-          href="/dashboard/subscriptions"
-          accent="var(--mint)"
-          lead={loading ? '…' : String(active.length)}
-          leadLabel="active"
-        >
-          {subsPreview.length > 0 && (
-            <ul className="space-y-2">
-              {subsPreview.map((sub) => {
-                const plan = plans.get(sub.planId);
-                const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
-                return (
-                  <li key={sub.id} className="flex items-center gap-3">
-                    <CadenceRing progress={progress} size={26} strokeWidth={2} />
-                    <p className="min-w-0 flex-1 truncate text-xs text-ink">
-                      {plan ? `${formatUSDC(plan.amount)} USDC` : `Plan #${sub.planId}`}
-                    </p>
-                    <span className="numeric shrink-0 text-[11px] text-ink-muted">{timeUntil(sub.nextPaymentDue)}</span>
-                  </li>
-                );
-              })}
-            </ul>
+      <div
+        className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr_215px] lg:grid-rows-[auto_auto]"
+        style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}
+      >
+        {/* ── the vault — the one gradient panel ─────────────── */}
+        <VaultPanel onOpen={() => setVaultOpen(true)} />
+
+        {/* ── escrow over time ───────────────────────────────── */}
+        <GlassCard hairline className="p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">Escrow over time</p>
+            <PreviewBadge />
+          </div>
+          <EscrowChart />
+        </GlassCard>
+
+        {/* ── action rail — spans both rows on desktop ───────── */}
+        <GlassCard hairline className="flex flex-col gap-3 p-5 lg:row-span-2">
+          <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">Actions</p>
+
+          <button
+            disabled
+            title="Arrives with F3 — writes go through your account"
+            className="w-full rounded-lg bg-mint px-4 py-2.5 text-sm font-medium text-canvas opacity-40"
+          >
+            + Add funds
+          </button>
+          <button
+            disabled
+            title="Arrives with F3 — always available, no questions asked"
+            className="w-full rounded-lg border border-line px-4 py-2.5 text-sm text-ink opacity-40"
+          >
+            Withdraw anytime
+          </button>
+          <Link
+            href="/dashboard/discover"
+            className="w-full rounded-lg border border-violet/50 px-4 py-2.5 text-center text-sm text-violet-light transition hover:border-violet hover:bg-violet/10"
+          >
+            Browse plans →
+          </Link>
+
+          {/* quick stats */}
+          <div className="mt-2 space-y-2.5 border-t border-line pt-4">
+            {[
+              { label: 'Active plans', value: loading ? '…' : String(active.length) },
+              { label: 'Monthly total', value: loading ? '…' : `${formatUSDC(monthly)} USDC` },
+              { label: 'Next charge', value: loading ? '…' : nextDue ? timeUntil(nextDue.nextPaymentDue) : '—' },
+            ].map((s) => (
+              <div key={s.label} className="flex items-center justify-between gap-2">
+                <p className="text-[10px] uppercase tracking-wider text-ink-faint">{s.label}</p>
+                <p className="numeric text-xs text-ink">{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* last payment — activity teaser */}
+          <Link href="/dashboard/activity" className="group mt-auto border-t border-line pt-4">
+            <div className="flex items-center gap-2">
+              <p className="numeric text-[10px] uppercase tracking-[0.18em] text-ink-faint">Last payment</p>
+              <PreviewBadge />
+            </div>
+            <p className="numeric mt-1.5 text-sm text-ink">
+              {formatUSDC(latestReceipt.amount)} USDC
+              <span className="text-ink-faint"> · {timeAgo(latestReceipt.paidAt)}</span>
+            </p>
+            <p className="numeric mt-1 text-[10px] text-ink-muted transition group-hover:text-ink">View activity →</p>
+          </Link>
+        </GlassCard>
+
+        {/* ── subscriptions table — rings as sparklines ──────── */}
+        <GlassCard hairline className="p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">Subscriptions</p>
+            <Link href="/dashboard/subscriptions" className="numeric text-[11px] text-ink-muted transition hover:text-ink">
+              View all →
+            </Link>
+          </div>
+
+          {!loading && tableRows.length === 0 && (
+            <div className="rounded-xl border border-dashed border-line bg-canvas/30 p-8 text-center">
+              <p className="text-sm text-ink-muted">Nothing recurring yet.</p>
+              <p className="mt-1 text-xs text-ink-faint">
+                <Link href="/dashboard/discover" className="text-mint hover:underline">
+                  Browse plans
+                </Link>{' '}
+                to set up your first one.
+              </p>
+            </div>
           )}
-        </SectionCard>
 
-        <SectionCard
-          title="Discover"
-          href="/dashboard/discover"
-          accent="var(--violet-light)"
-          lead={String(plans.size)}
-          leadLabel="plans to explore"
-        >
-          {plansPreview.length > 0 && (
-            <ul className="space-y-2">
-              {plansPreview.map((plan) => (
-                <li key={plan.id} className="flex items-center justify-between text-xs">
-                  <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span>
-                  <span className="text-ink-muted">/ {intervalLabel(plan.intervalSecs)}</span>
-                </li>
-              ))}
-            </ul>
+          {tableRows.length > 0 && (
+            <>
+              {/* header row */}
+              <div className="mb-2 grid grid-cols-[32px_1fr_1fr_auto] gap-3 px-1 sm:grid-cols-[32px_1fr_1fr_1fr_auto]">
+                <span />
+                <p className="numeric text-[9px] uppercase tracking-[0.16em] text-ink-faint">Plan</p>
+                <p className="numeric hidden text-[9px] uppercase tracking-[0.16em] text-ink-faint sm:block">Merchant</p>
+                <p className="numeric text-[9px] uppercase tracking-[0.16em] text-ink-faint">Next charge</p>
+                <span />
+              </div>
+              <ul className="space-y-1.5">
+                {tableRows.map((sub) => {
+                  const plan = plans.get(sub.planId);
+                  const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+                  return (
+                    <li
+                      key={sub.id}
+                      className="grid grid-cols-[32px_1fr_1fr_auto] items-center gap-3 rounded-xl border border-line bg-canvas/30 px-1 py-2.5 transition hover:border-[#282c39] sm:grid-cols-[32px_1fr_1fr_1fr_auto]"
+                    >
+                      <CadenceRing progress={progress} size={26} strokeWidth={2} />
+                      <p className="numeric truncate text-xs text-ink">
+                        {plan ? (
+                          <>
+                            {formatUSDC(plan.amount)} USDC
+                            <span className="text-ink-muted"> / {intervalLabel(plan.intervalSecs)}</span>
+                          </>
+                        ) : (
+                          `Plan #${sub.planId}`
+                        )}
+                      </p>
+                      <p className="numeric hidden truncate text-xs text-ink-muted sm:block">
+                        {plan ? shortAddress(plan.merchant) : '—'}
+                      </p>
+                      <p className="numeric text-xs text-ink-muted">{timeUntil(sub.nextPaymentDue)}</p>
+                      <span className="rounded-full bg-mint-deep px-2.5 py-0.5 text-[10px] text-mint">Active</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
-        </SectionCard>
-
-        <SectionCard
-          title="Activity"
-          href="/dashboard/activity"
-          accent="var(--violet)"
-          lead={`${formatUSDC(latestReceipt.amount)}`}
-          leadLabel="USDC — last payment"
-          badge={<PreviewBadge />}
-        />
+        </GlassCard>
       </div>
 
       <VaultModal

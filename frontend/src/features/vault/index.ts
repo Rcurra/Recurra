@@ -1,5 +1,6 @@
-// Vault feature barrel — the closed vault (hero), the open vault (modal),
-// and the door itself for anyone who needs the mark.
-export { VaultHero } from './VaultHero';
+// Vault feature barrel — the closed vault (gradient panel), the open
+// vault (modal), the escrow chart, and the door itself.
+export { VaultPanel } from './VaultPanel';
 export { VaultModal } from './VaultModal';
 export { VaultDoor } from './VaultDoor';
+export { EscrowChart } from './EscrowChart';
