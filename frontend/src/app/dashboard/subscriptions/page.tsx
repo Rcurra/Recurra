@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
+import { LoadingLine } from '@/components/LoadingLine';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeAgo, timeUntil } from '@/lib/format';
 import { MOCK_RECEIPTS } from '@/lib/mockData';
 
@@ -211,6 +212,8 @@ function SubscriptionsView() {
       {!activityOpen && (
         <>
           {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+
+          {loading && !error && <LoadingLine label="loading subscriptions…" />}
 
           {!loading && !error && shown.length === 0 && (
             <div

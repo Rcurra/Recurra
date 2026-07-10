@@ -19,6 +19,12 @@ export function parseUSDC(input: string): bigint | null {
   return BigInt(whole) * USDC_DECIMALS + BigInt(frac.padEnd(6, '0'));
 }
 
+// Plain helper (not a component) so callers can check "is this due" without
+// calling Date.now() directly in a render body (react-hooks/purity).
+export function isPastDue(date: Date): boolean {
+  return date.getTime() <= Date.now();
+}
+
 // Human time, per the microcopy law: "in 12 days", never timestamps.
 export function timeUntil(date: Date): string {
   const ms = date.getTime() - Date.now();

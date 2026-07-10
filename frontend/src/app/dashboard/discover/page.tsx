@@ -7,6 +7,7 @@ import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { GlassCard } from '@/components/GlassCard';
+import { LoadingLine } from '@/components/LoadingLine';
 import { MerchantMark } from '@/components/MerchantMark';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
 
@@ -60,6 +61,8 @@ export default function DiscoverPage() {
       </p>
 
       {error && <p className="text-sm text-danger">{error}</p>}
+
+      {loading && !error && <LoadingLine label="loading plans…" />}
 
       {!loading && !error && plans.length === 0 && (
         <div className="rounded-2xl border border-dashed border-line bg-surface/50 p-12 text-center">
