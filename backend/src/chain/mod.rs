@@ -9,14 +9,17 @@ pub mod bindings;
 
 use std::sync::Arc;
 
+use alloy::network::EthereumWallet;
 use alloy::primitives::{Address, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::signers::local::PrivateKeySigner;
 use chrono::{DateTime, Utc};
 
 use crate::config::Config;
 use crate::errors::AppError;
 use crate::models::{Plan, Subscription};
 use crate::openfort::OpenfortClient;
+use crate::sender::TxSender;
 use bindings::SubscriptionRegistry;
 
 /// Shared, cheaply-cloneable application state.
@@ -25,40 +28,86 @@ use bindings::SubscriptionRegistry;
 /// cloning `AppState` per request / per scheduler tick is effectively free.
 #[derive(Clone)]
 pub struct AppState {
-    /// HTTP JSON-RPC provider connected to `cfg.arbitrum_rpc`.
+    /// Read-only HTTP JSON-RPC provider connected to `cfg.arbitrum_rpc`. Used
+    /// for every view call, including simulating a charge before it's sent.
     pub provider: DynProvider,
     /// Parsed `SubscriptionRegistry` address (validated once at startup).
     pub registry: Address,
-    /// TEE signer for server-side writes. Held ready; the payment path that
-    /// uses it is blocked on `PaymentExecutor.executePayment` landing on-chain.
-    #[allow(dead_code)]
-    pub openfort: Arc<OpenfortClient>,
-    /// Raw config, kept for the scheduler interval, chain id, vault address, etc.
+    /// Parsed `PaymentExecutor` address, if configured. `None` leaves the
+    /// scheduler in log-only mode (it can read due subs but not fire them).
+    pub executor: Option<Address>,
+    /// Signs and submits `executePayment`. Local wallet on anvil, Openfort on
+    /// public networks — chosen once from config.
+    pub sender: TxSender,
+    /// Raw config, kept for the scheduler interval, vault address, etc.
     pub cfg: Config,
 }
 
 impl AppState {
-    /// Build the shared state from config, failing fast if the RPC URL or the
-    /// registry address are malformed (better a startup panic than a confusing
-    /// error on the first request).
-    pub fn new(cfg: Config) -> Result<Self, AppError> {
-        let url = cfg
+    /// Build the shared state from config, failing fast if the RPC URL, the
+    /// registry/executor addresses or the local signer key are malformed, or if
+    /// the RPC is unreachable (better a startup error than a confusing one on
+    /// the first request/tick).
+    pub async fn new(cfg: Config) -> Result<Self, AppError> {
+        let url: reqwest::Url = cfg
             .arbitrum_rpc
             .parse()
             .map_err(|e| AppError::Internal(format!("invalid ARBITRUM_RPC url: {e}")))?;
 
-        let provider = ProviderBuilder::new().connect_http(url).erased();
+        let provider = ProviderBuilder::new().connect_http(url.clone()).erased();
 
         let registry = cfg.registry_address.parse::<Address>().map_err(|e| {
             AppError::Internal(format!("invalid SUBSCRIPTION_REGISTRY_ADDRESS: {e}"))
         })?;
 
-        let openfort = Arc::new(OpenfortClient::new(cfg.openfort_secret_key.clone()));
+        // Optional: the read-only API boots without an executor; the scheduler
+        // just can't fire until it's set.
+        let executor = match &cfg.executor_address {
+            Some(s) => Some(
+                s.parse::<Address>()
+                    .map_err(|e| AppError::Internal(format!("invalid EXECUTOR_ADDRESS: {e}")))?,
+            ),
+            None => None,
+        };
+
+        // Single source of truth for the tx payload — read from the RPC rather
+        // than trusting a hand-set env var that could disagree with it.
+        let chain_id = provider
+            .get_chain_id()
+            .await
+            .map_err(|e| AppError::Chain(format!("failed to read chain id from RPC: {e}")))?;
+
+        // Pick the signing backend: a local wallet key means the anvil/dev path
+        // (sign in-process); otherwise route through the Openfort TEE.
+        let sender = match &cfg.local_signer_key {
+            Some(key) => {
+                let signer: PrivateKeySigner = key.parse().map_err(|e| {
+                    AppError::Internal(format!("invalid LOCAL_SIGNER_PRIVATE_KEY: {e}"))
+                })?;
+                let signer_addr = signer.address();
+                let wallet = EthereumWallet::from(signer);
+                let wallet_provider = ProviderBuilder::new()
+                    .wallet(wallet)
+                    .connect_http(url)
+                    .erased();
+                tracing::info!(signer = %signer_addr, "tx sender: local wallet (anvil/dev path)");
+                TxSender::Local(wallet_provider)
+            }
+            None => {
+                let openfort = Arc::new(OpenfortClient::new(cfg.openfort_secret_key.clone()));
+                tracing::info!("tx sender: Openfort hosted TEE");
+                TxSender::Openfort {
+                    client: openfort,
+                    chain_id,
+                }
+            }
+        };
 
         Ok(Self {
             provider,
             registry,
-            openfort,
+            executor,
+            sender,
             cfg,
         })
     }

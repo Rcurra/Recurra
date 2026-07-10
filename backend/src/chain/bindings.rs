@@ -71,10 +71,38 @@ sol! {
     }
 }
 
-// NOTE: PaymentExecutor is intentionally NOT bound yet. contracts/src/PaymentExecutor.sol
-// is still a `TODO` stub carrying the pre-M0 shape (registerSessionKey / a 3-field
-// PaymentExecuted). Once it's rewritten to the frozen interface
-// (`executePayment(uint256 subId)`, the 5-field `PaymentExecuted` event, and the
-// `NotAuthorized`/`NotDue`/`SubscriptionInactive`/`InsufficientVaultBalance` errors),
-// bind that surface here — and only here — so the scheduler can encode calldata and
-// triage the reverts. Binding it before then would diverge from the deployed contract.
+// PaymentExecutor — the one contract the backend *writes* to. The scheduler
+// encodes `executePayment(subId)` calldata and submits it; every other function
+// here is `view`, used to simulate the charge before spending a real tx.
+//
+// This mirrors the frozen M0 interface now merged in contracts/src/PaymentExecutor.sol.
+sol! {
+    #[sol(rpc)]
+    #[allow(missing_docs)]
+    contract PaymentExecutor {
+        // The only write the backend authors. Re-derives amount/token/recipient/
+        // due-ness from chain state, so we send nothing but the subId.
+        function executePayment(uint256 subId) external;
+
+        // The single address allowed to call executePayment. Read so the scheduler
+        // can simulate with the correct `from` — an eth_call defaults to the zero
+        // address, which would always revert NotAuthorized and mask the real reason.
+        function authorizedExecutor() external view returns (address);
+
+        // --- events ---
+        event PaymentExecuted(
+            uint256 indexed subId,
+            address indexed subscriber,
+            address indexed merchant,
+            address token,
+            uint256 amount
+        );
+
+        // --- reverts the scheduler triages when a simulation fails ---
+        error NotAuthorized();          // caller isn't authorizedExecutor
+        error NotDue();                 // charged before nextPaymentDue (benign scheduler race)
+        error SubscriptionInactive();   // cancelled sub OR deactivated plan
+        error InsufficientVaultBalance();// escrow can't cover the plan amount
+        error ZeroAddress();            // constructor/rotation wiring to 0
+    }
+}

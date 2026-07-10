@@ -10,10 +10,14 @@ pub struct Config {
     #[allow(dead_code)]
     pub vault_address: String,
     /// The `PaymentExecutor` address the scheduler targets with
-    /// `executePayment`. Optional today: the executor contract is still a stub,
-    /// so this is unset until the M2 payment path lands. Becomes required then.
-    #[allow(dead_code)]
+    /// `executePayment`. Optional so the read-only API still boots without it;
+    /// when unset the scheduler logs due subs but can't fire.
     pub executor_address: Option<String>,
+    /// Private key for the local signing path (anvil / M2 e2e). When set, the
+    /// scheduler signs `executePayment` in-process against `ARBITRUM_RPC`
+    /// instead of routing through Openfort — Openfort's hosted TEE can't reach a
+    /// local anvil node. Unset in staging/prod, where Openfort (M3) takes over.
+    pub local_signer_key: Option<String>,
     /// How often the scheduler checks for due payments (seconds)
     pub scheduler_interval_secs: u64,
 }
@@ -30,6 +34,9 @@ impl Config {
             registry_address: require("SUBSCRIPTION_REGISTRY_ADDRESS"),
             vault_address: require("SUBSCRIPTION_VAULT_ADDRESS"),
             executor_address: env::var("EXECUTOR_ADDRESS").ok().filter(|s| !s.is_empty()),
+            local_signer_key: env::var("LOCAL_SIGNER_PRIVATE_KEY")
+                .ok()
+                .filter(|s| !s.is_empty()),
             scheduler_interval_secs: env::var("SCHEDULER_INTERVAL_SECS")
                 .unwrap_or_else(|_| "60".into())
                 .parse()

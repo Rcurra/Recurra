@@ -5,6 +5,7 @@ mod errors;
 mod models;
 mod openfort;
 mod scheduler;
+mod sender;
 
 use axum::Router;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -22,7 +23,9 @@ async fn main() {
 
     // Shared chain access (provider + registry address + Openfort client),
     // cloned into both the scheduler and the API router.
-    let state = chain::AppState::new(cfg).expect("failed to initialise chain state");
+    let state = chain::AppState::new(cfg)
+        .await
+        .expect("failed to initialise chain state");
 
     // Spawn the scheduler as a background task.
     tokio::spawn(scheduler::run(state.clone()));
