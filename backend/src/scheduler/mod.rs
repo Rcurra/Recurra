@@ -1,8 +1,10 @@
 use std::time::Duration;
 
+use alloy::primitives::U256;
 use tokio::time;
 
 use crate::chain::AppState;
+use crate::chain::bindings::PaymentExecutor;
 use crate::errors::AppError;
 
 // Wakes up every `cfg.scheduler_interval_secs` seconds, checks the registry for
@@ -34,22 +36,84 @@ async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
 
     tracing::info!(count = due.len(), "found due subscriptions");
 
-    // 2. For each due subscription we would build calldata for
-    //    PaymentExecutor.executePayment(subId) and submit it via
-    //    state.openfort.send_transaction(...). Both are blocked until
-    //    PaymentExecutor is rewritten to the frozen M0 interface and bound in
-    //    chain::bindings. A failure on one subscription must not abort the
-    //    batch, so this loop will `continue` past per-payment errors then,
-    //    triaging the decoded revert (NotDue = benign race, skip;
-    //    SubscriptionInactive = skip; InsufficientVaultBalance = warn).
-    for sub in due {
-        tracing::info!(
-            sub_id = sub.id,
-            plan_id = sub.plan_id,
-            subscriber = %sub.subscriber,
-            due = %sub.next_payment_due,
-            "subscription due for payment (execution blocked on PaymentExecutor)"
+    // Without an executor address we can't fire — stay in log-only mode rather
+    // than erroring every tick.
+    let Some(executor) = state.executor else {
+        tracing::warn!(
+            count = due.len(),
+            "subscriptions are due but EXECUTOR_ADDRESS is unset — cannot fire; \
+             set it to enable the payment path"
         );
+        return Ok(());
+    };
+
+    let executor_contract = PaymentExecutor::new(executor, &state.provider);
+
+    // The address executePayment must be called from. We simulate as this
+    // address so the caller check passes and the *business* reverts (due-ness,
+    // active, balance) are what surface. Read from chain rather than assumed.
+    let authorized = executor_contract.authorizedExecutor().call().await?;
+
+    // 2. For each due sub: simulate the charge, triage any revert, and only
+    //    submit a real tx when it would succeed. A per-sub failure `continue`s
+    //    past — one bad sub must never abort the batch.
+    for sub in due {
+        let sub_id = U256::from(sub.id);
+        let call = executor_contract.executePayment(sub_id).from(authorized);
+
+        // Simulate first. executePayment re-derives everything from chain state,
+        // so a passing eth_call means the real tx will move money.
+        if let Err(e) = call.call().await {
+            match e.as_decoded_interface_error::<PaymentExecutor::PaymentExecutorErrors>() {
+                // The scheduler's own idempotency: a racing tick (or a charge
+                // already made this cycle) reverts NotDue. Expected, not an error.
+                Some(PaymentExecutor::PaymentExecutorErrors::NotDue(_)) => {
+                    tracing::info!(sub_id = sub.id, "skip: not due (benign race)");
+                }
+                Some(PaymentExecutor::PaymentExecutorErrors::SubscriptionInactive(_)) => {
+                    tracing::info!(sub_id = sub.id, "skip: subscription or plan inactive");
+                }
+                Some(PaymentExecutor::PaymentExecutorErrors::InsufficientVaultBalance(_)) => {
+                    tracing::warn!(
+                        sub_id = sub.id,
+                        subscriber = %sub.subscriber,
+                        "skip: escrow can't cover the plan amount"
+                    );
+                }
+                // NotAuthorized isn't per-sub — our signer isn't the executor's
+                // authorizedExecutor, so every sub this batch will fail the same
+                // way. Stop rather than spam.
+                Some(PaymentExecutor::PaymentExecutorErrors::NotAuthorized(_)) => {
+                    tracing::error!(
+                        %authorized,
+                        "executor rejects our signer (NotAuthorized) — check the \
+                         signer matches authorizedExecutor; aborting batch"
+                    );
+                    break;
+                }
+                Some(PaymentExecutor::PaymentExecutorErrors::ZeroAddress(_)) => {
+                    tracing::error!(sub_id = sub.id, "unexpected ZeroAddress revert");
+                }
+                None => {
+                    tracing::error!(sub_id = sub.id, error = %e, "simulation failed");
+                }
+            }
+            continue;
+        }
+
+        // Simulation passed — submit the real, signed tx via the configured
+        // sender (local wallet on anvil, Openfort on public networks).
+        let calldata = call.calldata().clone();
+        match state.sender.send(executor, calldata).await {
+            Ok(tx_hash) => tracing::info!(
+                sub_id = sub.id,
+                plan_id = sub.plan_id,
+                subscriber = %sub.subscriber,
+                %tx_hash,
+                "fired executePayment"
+            ),
+            Err(e) => tracing::error!(sub_id = sub.id, error = %e, "submit failed"),
+        }
     }
 
     Ok(())
