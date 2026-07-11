@@ -11,7 +11,17 @@
 // custom() transport signs via its own provider — same account-as-string
 // override either way.
 
-import { BaseError, createPublicClient, http, parseEventLogs, type PublicClient } from 'viem';
+import {
+  BaseError,
+  ContractFunctionRevertedError,
+  createPublicClient,
+  http,
+  parseEventLogs,
+  type Abi,
+  type Address,
+  type PublicClient,
+  type WalletClient,
+} from 'viem';
 import { getChain } from './chain';
 import { getWalletClient } from './magic';
 import {
@@ -38,17 +48,41 @@ function requireWalletClient() {
   return walletClient;
 }
 
+// Simulate-then-write, for every state-changing call in this file. Two
+// failure modes this closes, both found live: (1) simulating first means a
+// call that would revert (AlreadySubscribed, PlanNotActive, ...) throws its
+// real decoded reason BEFORE the user signs anything — no wasted signature,
+// no wasted gas. (2) `writeContract` on its own only throws for a failure
+// *before* broadcast; a business-logic revert that happens on-chain still
+// resolves as a normal receipt with `status: 'reverted'`. Every write here
+// used to skip that check entirely, so a reverted unsubscribe/deposit/
+// withdraw silently reported success — the UI would say "funded" when
+// nothing moved. Checking `status` after mining is the belt-and-suspenders:
+// state can still change between simulate and the tx actually landing.
+async function writeContractSafely(
+  walletClient: WalletClient,
+  account: Address,
+  params: { address: Address; abi: Abi; functionName: string; args: readonly unknown[] },
+) {
+  const { request } = await getPublicClient().simulateContract({ ...params, account });
+  const hash = await walletClient.writeContract({ ...request, chain: getChain(), account } as Parameters<
+    WalletClient['writeContract']
+  >[0]);
+  const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
+  if (receipt.status !== 'success') {
+    throw new Error(`${params.functionName}() reverted on-chain despite passing simulation`);
+  }
+  return receipt;
+}
+
 export async function subscribe(address: string, planId: number): Promise<number> {
   const walletClient = requireWalletClient();
-  const hash = await walletClient.writeContract({
-    account: address as `0x${string}`,
-    chain: getChain(),
+  const receipt = await writeContractSafely(walletClient, address as `0x${string}`, {
     address: getRegistryAddress(),
     abi: registryAbi,
     functionName: 'subscribe',
     args: [BigInt(planId)],
   });
-  const receipt = await getPublicClient().waitForTransactionReceipt({ hash });
   const [event] = parseEventLogs({ abi: registryAbi, eventName: 'Subscribed', logs: receipt.logs });
   if (!event) throw new Error('subscribe() succeeded but no Subscribed event was found in the receipt');
   return Number(event.args.subId);
@@ -56,15 +90,12 @@ export async function subscribe(address: string, planId: number): Promise<number
 
 export async function unsubscribe(address: string, subId: number): Promise<void> {
   const walletClient = requireWalletClient();
-  const hash = await walletClient.writeContract({
-    account: address as `0x${string}`,
-    chain: getChain(),
+  await writeContractSafely(walletClient, address as `0x${string}`, {
     address: getRegistryAddress(),
     abi: registryAbi,
     functionName: 'unsubscribe',
     args: [BigInt(subId)],
   });
-  await getPublicClient().waitForTransactionReceipt({ hash });
 }
 
 // Approve only if the current allowance is short, then deposit — two
@@ -92,47 +123,62 @@ export async function approveAndDeposit(
 
   if (allowance < amount) {
     onStep?.('approve');
-    const approveHash = await walletClient.writeContract({
-      account,
-      chain: getChain(),
+    await writeContractSafely(walletClient, account, {
       address: usdc,
       abi: usdcAbi,
       functionName: 'approve',
       args: [vault, amount],
     });
-    await getPublicClient().waitForTransactionReceipt({ hash: approveHash });
   }
 
   onStep?.('deposit');
-  const depositHash = await walletClient.writeContract({
-    account,
-    chain: getChain(),
+  await writeContractSafely(walletClient, account, {
     address: vault,
     abi: vaultAbi,
     functionName: 'deposit',
     args: [usdc, amount],
   });
-  await getPublicClient().waitForTransactionReceipt({ hash: depositHash });
 }
 
 export async function withdraw(address: string, amount: bigint): Promise<void> {
   const walletClient = requireWalletClient();
-  const hash = await walletClient.writeContract({
-    account: address as `0x${string}`,
-    chain: getChain(),
+  await writeContractSafely(walletClient, address as `0x${string}`, {
     address: getVaultAddress(),
     abi: vaultAbi,
     functionName: 'withdraw',
     args: [getUsdcAddress(), amount],
   });
-  await getPublicClient().waitForTransactionReceipt({ hash });
 }
 
-// Custom-error reverts (AlreadySubscribed, InsufficientBalance, ...) surface
-// through viem as a BaseError whose shortMessage names the actual error —
-// that's more useful to a user than the wrapped RPC/ABI-encoding noise.
+// Plain-English translations for the custom errors defined in
+// lib/contracts.ts's ABIs. Anything not listed here still shows the raw
+// decoded error name (e.g. "NotPlanMerchant") — jargon, but a real name
+// beats a hex selector; anything genuinely unrecognized falls further back
+// to shortMessage in walletErrorMessage below.
+const FRIENDLY_REVERTS: Record<string, string> = {
+  AlreadySubscribed: "You're already subscribed to this plan.",
+  PlanNotActive: 'This plan is no longer available.',
+  SubscriptionNotActive: 'This subscription is already cancelled.',
+  ZeroAmount: 'Enter an amount greater than zero.',
+  InsufficientBalance: "Your vault doesn't have enough to cover that.",
+  ERC20InsufficientBalance: "Your wallet doesn't have enough USDC for this amount.",
+  ERC20InsufficientAllowance: 'Approval too low for this amount — try again.',
+};
+
+// Custom-error reverts (AlreadySubscribed, InsufficientBalance, ...) decode
+// to a `ContractFunctionRevertedError` buried in the cause chain — its own
+// top-level `shortMessage` is just a generic "function X reverted" wrapper,
+// not the actual reason. `BaseError.walk` finds the specific nested error;
+// `.data.errorName` is the decoded custom error's real name (only resolves
+// if that error is declared in the ABI passed to the call — see
+// lib/contracts.ts's erc20Errors/registryAbi/vaultAbi error entries).
 export function walletErrorMessage(error: unknown): string {
-  if (error instanceof BaseError) return error.shortMessage;
+  if (error instanceof BaseError) {
+    const reverted = error.walk((e) => e instanceof ContractFunctionRevertedError);
+    const errorName = reverted instanceof ContractFunctionRevertedError ? reverted.data?.errorName : undefined;
+    if (errorName) return FRIENDLY_REVERTS[errorName] ?? errorName;
+    return error.shortMessage;
+  }
   if (error instanceof Error) return error.message;
   return 'Something went wrong';
 }
@@ -153,15 +199,12 @@ export async function getVaultBalance(address: string): Promise<bigint> {
 // this on NEXT_PUBLIC_DEV_WALLET, same flag the dev-signer path already uses.
 export async function mintTestUsdc(address: string, amount: bigint): Promise<void> {
   const walletClient = requireWalletClient();
-  const hash = await walletClient.writeContract({
-    account: address as `0x${string}`,
-    chain: getChain(),
+  await writeContractSafely(walletClient, address as `0x${string}`, {
     address: getUsdcAddress(),
     abi: usdcAbi,
     functionName: 'mint',
     args: [address as `0x${string}`, amount],
   });
-  await getPublicClient().waitForTransactionReceipt({ hash });
 }
 
 export async function getUsdcBalance(address: string): Promise<bigint> {
