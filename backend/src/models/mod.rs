@@ -8,6 +8,10 @@ pub struct Plan {
     pub token: String,    // ERC-20 token address
     pub amount: String,   // token smallest-unit string, to avoid float precision loss
     pub interval_secs: u64,
+    // Merchant-controlled kill switch (deactivatePlan). False means the
+    // registry rejects new subscribe() calls for it — existing subscribers
+    // are unaffected, but it should never appear as a *browsable* plan.
+    pub active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

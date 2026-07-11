@@ -41,7 +41,11 @@ export default function DiscoverPage() {
   }, []);
 
   const yourPlans = plans.filter((p) => subscribedPlanIds.has(p.id));
-  const otherPlans = plans.filter((p) => !subscribedPlanIds.has(p.id));
+  // Browsable-only: a deactivated plan can't accept new subscribe() calls
+  // (PlanNotActive), so it has no business showing up here — but a plan you
+  // already hold stays in "Your subscriptions" above even if the merchant
+  // deactivates it later, since you still need to see/manage it.
+  const otherPlans = plans.filter((p) => !subscribedPlanIds.has(p.id) && p.active);
 
   // group by merchant, insertion-ordered
   const byMerchant = new Map<string, Plan[]>();

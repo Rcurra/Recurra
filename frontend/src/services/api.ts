@@ -20,6 +20,7 @@ interface PlanWire {
   token: string;
   amount: string;
   interval_secs: number;
+  active: boolean;
 }
 
 interface SubscriptionWire {
@@ -56,6 +57,7 @@ const toPlan = (w: PlanWire): Plan => ({
   token: w.token,
   amount: BigInt(w.amount),
   intervalSecs: w.interval_secs,
+  active: w.active,
 });
 
 const toSubscription = (w: SubscriptionWire): Subscription => ({

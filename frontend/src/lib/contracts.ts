@@ -22,6 +22,37 @@ export function getUsdcAddress(): `0x${string}` {
   return requireAddress('NEXT_PUBLIC_USDC_ADDRESS', process.env.NEXT_PUBLIC_USDC_ADDRESS);
 }
 
+// Standard OpenZeppelin IERC20Errors — MockUSDC inherits OZ's ERC20, so a
+// transferFrom short on balance/allowance reverts with one of these, not a
+// registry/vault error. Needed on BOTH usdcAbi (direct approve/mint calls)
+// and vaultAbi (deposit/withdraw call into the token internally and bubble
+// its revert unchanged) — without it here, viem can't name the error and
+// walletErrorMessage falls back to a raw "reverted with signature 0x...".
+const erc20Errors = [
+  {
+    name: 'ERC20InsufficientBalance',
+    type: 'error',
+    inputs: [
+      { name: 'sender', type: 'address' },
+      { name: 'balance', type: 'uint256' },
+      { name: 'needed', type: 'uint256' },
+    ],
+  },
+  {
+    name: 'ERC20InsufficientAllowance',
+    type: 'error',
+    inputs: [
+      { name: 'spender', type: 'address' },
+      { name: 'allowance', type: 'uint256' },
+      { name: 'needed', type: 'uint256' },
+    ],
+  },
+  { name: 'ERC20InvalidSender', type: 'error', inputs: [{ name: 'sender', type: 'address' }] },
+  { name: 'ERC20InvalidReceiver', type: 'error', inputs: [{ name: 'receiver', type: 'address' }] },
+  { name: 'ERC20InvalidApprover', type: 'error', inputs: [{ name: 'approver', type: 'address' }] },
+  { name: 'ERC20InvalidSpender', type: 'error', inputs: [{ name: 'spender', type: 'address' }] },
+] as const;
+
 // SubscriptionRegistry — subscribe/unsubscribe only; markPaid/isDue/plan
 // reads stay the backend's and services/api.ts's job.
 export const registryAbi = [
@@ -50,6 +81,14 @@ export const registryAbi = [
       { name: 'planId', type: 'uint256', indexed: true },
     ],
   },
+  // Every revert subscribe()/unsubscribe() can throw — without these listed
+  // here, a revert shows as a raw selector instead of e.g. "AlreadySubscribed".
+  { name: 'InvalidPlanParams', type: 'error', inputs: [] },
+  { name: 'PlanNotActive', type: 'error', inputs: [] },
+  { name: 'AlreadySubscribed', type: 'error', inputs: [] },
+  { name: 'NotPlanMerchant', type: 'error', inputs: [] },
+  { name: 'NotSubscriber', type: 'error', inputs: [] },
+  { name: 'SubscriptionNotActive', type: 'error', inputs: [] },
 ] as const;
 
 // SubscriptionVault — deposit/withdraw + the balances read the reservoir
@@ -85,6 +124,9 @@ export const vaultAbi = [
     ],
     outputs: [{ name: '', type: 'uint256' }],
   },
+  { name: 'ZeroAmount', type: 'error', inputs: [] },
+  { name: 'InsufficientBalance', type: 'error', inputs: [] },
+  ...erc20Errors,
 ] as const;
 
 // MockUSDC — standard ERC-20 plus the open mint() faucet (dev/testnet only).
@@ -126,4 +168,5 @@ export const usdcAbi = [
     ],
     outputs: [],
   },
+  ...erc20Errors,
 ] as const;

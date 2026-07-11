@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
+import { InlineError } from '@/components/InlineError';
 import { MerchantMark } from '@/components/MerchantMark';
 import { useAuth } from '@/features/auth';
 import type { Plan } from '@/types';
@@ -182,10 +183,14 @@ function PlanDetailContent({
                 </div>
 
                 <p className="mt-3 text-xs leading-relaxed text-ink-muted">
-                  <span className="numeric text-ink">{formatUSDC(fundAmount)} USDC</span> goes into your
-                  vault. It stays yours — withdraw anytime. Recurra can only ever move{' '}
-                  <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span> every{' '}
-                  {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
+                  <span className="numeric text-ink">{formatUSDC(fundAmount)} USDC</span>{' '}
+                  goes into your vault — your first charge fires today, then you&apos;re covered for
+                  the next{' '}
+                  <span className="numeric text-ink">{months} months</span>{' '}
+                  without adding more. It stays yours — withdraw anytime. Recurra can only ever
+                  move{' '}
+                  <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span>{' '}
+                  every {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
                 </p>
               </div>
 
@@ -216,11 +221,22 @@ function PlanDetailContent({
                     {formatUSDC(fundAmount)} USDC is in your vault.
                   </p>
                 )}
-                {error && <p className="text-[11px] text-danger">{error}</p>}
+                {error && (
+                  <>
+                    {subId !== null && (
+                      <p className="text-[11px] text-ink-faint">
+                        Your schedule is already set up — only funding failed. Retrying will not
+                        create a second subscription.
+                      </p>
+                    )}
+                    <InlineError message={error} />
+                  </>
+                )}
                 {phase === 'idle' && !error && (
                   <p className="text-[11px] text-ink-faint">
-                    cancel anytime — your worst case is ever only one cycle · 3 signatures for now, 1 once
-                    account abstraction lands
+                    Subscribing sets up your schedule and deposits the amount above — both happen in
+                    this one click. Cancel anytime · 3 signatures for now, 1 once account abstraction
+                    lands.
                   </p>
                 )}
               </div>

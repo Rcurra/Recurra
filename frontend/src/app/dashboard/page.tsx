@@ -15,6 +15,7 @@ import {
   formatUSDC,
   intervalLabel,
   isPastDue,
+  isUpcoming,
   monthlyEquivalent,
   shortAddress,
   timeUntil,
@@ -99,6 +100,15 @@ export default function OverviewPage() {
           return plan && isPastDue(s.nextPaymentDue) && vaultBalance < plan.amount;
         });
 
+  // Coming-up heads-up — fully-funded subs get advance notice too, not just
+  // the ones at risk. Excludes anything already in `underfunded` so a single
+  // sub never shows two competing banners at once.
+  const underfundedIds = new Set(underfunded.map((s) => s.id));
+  const upcoming = active.filter((s) => {
+    const plan = plans.get(s.planId);
+    return plan && !underfundedIds.has(s.id) && isUpcoming(s.nextPaymentDue, plan.intervalSecs);
+  });
+
   return (
     <div className="mx-auto max-w-4xl px-6 pt-12 pb-16">
       {error && <p className="mb-4 text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
@@ -113,8 +123,9 @@ export default function OverviewPage() {
               <>
                 Your{' '}
                 <span className="numeric">{formatUSDC(plans.get(underfunded[0].planId)!.amount)} USDC</span>{' '}
-                charge to {shortAddress(plans.get(underfunded[0].planId)!.merchant)} is due, but your vault
-                can&apos;t cover it yet — it&apos;ll go through as soon as you add funds.
+                charge to {shortAddress(plans.get(underfunded[0].planId)!.merchant)}{' '}
+                is due, but your vault can&apos;t cover it yet — it&apos;ll go through as soon as you
+                add funds.
               </>
             ) : (
               <>
@@ -129,6 +140,28 @@ export default function OverviewPage() {
           >
             + Add funds
           </button>
+        </div>
+      )}
+
+      {upcoming.length > 0 && (
+        <div
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/30 bg-mint-deep/60 px-5 py-4"
+          style={{ animation: 'fadeUp 0.7s ease both' }}
+        >
+          <p className="text-sm text-ink">
+            {upcoming.length === 1 ? (
+              <>
+                Your{' '}
+                <span className="numeric">{formatUSDC(plans.get(upcoming[0].planId)!.amount)} USDC</span>{' '}
+                charge to {shortAddress(plans.get(upcoming[0].planId)!.merchant)}{' '}
+                is coming up {timeUntil(upcoming[0].nextPaymentDue)} — your vault has it covered.
+              </>
+            ) : (
+              <>
+                {upcoming.length} of your subscriptions are due soon — your vault has them covered.
+              </>
+            )}
+          </p>
         </div>
       )}
 

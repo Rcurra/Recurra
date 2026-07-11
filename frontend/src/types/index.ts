@@ -9,6 +9,9 @@ export interface Plan {
   token: string; // ERC-20 address
   amount: bigint; // token smallest units per interval
   intervalSecs: number;
+  // Merchant kill switch (deactivatePlan). False means new subscribe()
+  // calls revert PlanNotActive — a browse list must filter on this.
+  active: boolean;
 }
 
 export interface Subscription {

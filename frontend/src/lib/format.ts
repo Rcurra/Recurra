@@ -25,6 +25,20 @@ export function isPastDue(date: Date): boolean {
   return date.getTime() <= Date.now();
 }
 
+// "Coming up soon" — independent of whether the vault can cover it (that's
+// isPastDue + a balance check's job, see the under-funded banner). This is
+// pure advance notice: a fully-funded subscriber should still see a charge
+// coming before it fires. Window scales with the plan's own cadence (20% of
+// the interval) so a daily plan doesn't warn a day early and a monthly plan
+// doesn't warn a minute early, capped at 24h so a yearly plan doesn't warn
+// two months out.
+export function isUpcoming(nextPaymentDue: Date, intervalSecs: number): boolean {
+  const msUntilDue = nextPaymentDue.getTime() - Date.now();
+  if (msUntilDue <= 0) return false; // already due — isPastDue's territory
+  const thresholdMs = Math.min(24 * 60 * 60 * 1000, intervalSecs * 1000 * 0.2);
+  return msUntilDue <= thresholdMs;
+}
+
 // Human time, per the microcopy law: "in 12 days", never timestamps.
 export function timeUntil(date: Date): string {
   const ms = date.getTime() - Date.now();
