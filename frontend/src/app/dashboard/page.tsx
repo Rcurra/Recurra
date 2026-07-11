@@ -9,7 +9,16 @@ import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
-import { cycleProgress, formatUSDC, intervalLabel, monthlyEquivalent, shortAddress, timeUntil } from '@/lib/format';
+import { LoadingLine } from '@/components/LoadingLine';
+import {
+  cycleProgress,
+  formatUSDC,
+  intervalLabel,
+  isPastDue,
+  monthlyEquivalent,
+  shortAddress,
+  timeUntil,
+} from '@/lib/format';
 import { getVaultBalance } from '@/lib/wallet';
 
 function PreviewBadge() {
@@ -76,9 +85,52 @@ export default function OverviewPage() {
     .sort((a, b) => a.nextPaymentDue.getTime() - b.nextPaymentDue.getTime())
     .slice(0, 4);
 
+  // Under-funded warning — sub due but runway zero. Derived entirely from
+  // data already on screen: due = nextPaymentDue has passed; can't-cover =
+  // the pooled vault balance is short of that plan's per-cycle amount.
+  // Nothing is lost if this sits unfunded a while — the charge just waits
+  // (PaymentExecutor reverts InsufficientVaultBalance, markPaid never
+  // runs) until funded, then goes through for the full amount.
+  const underfunded =
+    vaultBalance === null
+      ? []
+      : active.filter((s) => {
+          const plan = plans.get(s.planId);
+          return plan && isPastDue(s.nextPaymentDue) && vaultBalance < plan.amount;
+        });
+
   return (
     <div className="mx-auto max-w-4xl px-6 pt-12 pb-16">
       {error && <p className="mb-4 text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
+
+      {underfunded.length > 0 && (
+        <div
+          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet/40 bg-violet/10 px-5 py-4"
+          style={{ animation: 'fadeUp 0.7s ease both' }}
+        >
+          <p className="text-sm text-ink">
+            {underfunded.length === 1 ? (
+              <>
+                Your{' '}
+                <span className="numeric">{formatUSDC(plans.get(underfunded[0].planId)!.amount)} USDC</span>{' '}
+                charge to {shortAddress(plans.get(underfunded[0].planId)!.merchant)} is due, but your vault
+                can&apos;t cover it yet — it&apos;ll go through as soon as you add funds.
+              </>
+            ) : (
+              <>
+                {underfunded.length} of your subscriptions are due but your vault can&apos;t cover them yet
+                — they&apos;ll go through as soon as you add funds.
+              </>
+            )}
+          </p>
+          <button
+            onClick={() => setVaultOpen(true)}
+            className="numeric shrink-0 rounded-lg border border-violet/50 bg-violet/20 px-4 py-2 text-xs text-violet-light transition hover:bg-violet/30"
+          >
+            + Add funds
+          </button>
+        </div>
+      )}
 
       <div
         className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]"
@@ -105,6 +157,8 @@ export default function OverviewPage() {
             View all →
           </Link>
         </div>
+
+        {loading && <LoadingLine label="loading subscriptions…" />}
 
         {!loading && tableRows.length === 0 && (
           <div className="rounded-xl border border-dashed border-line bg-canvas/30 p-10 text-center">
