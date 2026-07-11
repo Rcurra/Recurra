@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
 import { CadenceRing } from '@/components/CadenceRing';
+import { InlineError } from '@/components/InlineError';
 import { useAuth } from '@/features/auth';
 import type { Plan, Subscription } from '@/types';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
@@ -219,7 +220,7 @@ function SubDetailContent({
                     </button>
                   )}
                   {cancelError ? (
-                    <p className="text-[11px] text-danger">{cancelError}</p>
+                    <InlineError message={cancelError} />
                   ) : (
                     <p className="text-[11px] text-ink-faint">
                       your escrow stays yours — withdraw anytime, even mid-cycle

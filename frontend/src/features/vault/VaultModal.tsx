@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
+import { InlineError } from '@/components/InlineError';
 import { formatUSDC, parseUSDC, shortAddress, timeAgo } from '@/lib/format';
 import { MOCK_RECEIPTS } from '@/lib/mockData';
 import { approveAndDeposit, mintTestUsdc, walletErrorMessage, withdraw } from '@/lib/wallet';
@@ -208,7 +209,9 @@ function VaultModalContent({
               )}
 
               {actionError ? (
-                <p className="mt-2 text-[11px] text-danger">{actionError}</p>
+                <div className="mt-2">
+                  <InlineError message={actionError} />
+                </div>
               ) : (
                 amount.length === 0 && (
                   <p className="mt-2 text-[11px] text-ink-faint">enter an amount to add funds or withdraw</p>
