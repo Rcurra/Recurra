@@ -230,7 +230,7 @@ impl AppState {
             return Ok(None);
         }
         Ok(Some(map_plan(
-            id, p.merchant, p.token, p.amount, p.interval,
+            id, p.merchant, p.token, p.amount, p.interval, p.active,
         )))
     }
 
@@ -247,7 +247,7 @@ impl AppState {
             if p.merchant == Address::ZERO {
                 continue;
             }
-            plans.push(map_plan(id, p.merchant, p.token, p.amount, p.interval));
+            plans.push(map_plan(id, p.merchant, p.token, p.amount, p.interval, p.active));
         }
         Ok(plans)
     }
@@ -286,13 +286,14 @@ fn map_subscription(
 /// - `amount` is a token-smallest-unit `uint256` → decimal string, so no
 ///   precision is lost squeezing it through a JSON number
 /// - `interval` is seconds → `u64`
-fn map_plan(id: u64, merchant: Address, token: Address, amount: U256, interval: U256) -> Plan {
+fn map_plan(id: u64, merchant: Address, token: Address, amount: U256, interval: U256, active: bool) -> Plan {
     Plan {
         id,
         merchant: merchant.to_checksum(None),
         token: token.to_checksum(None),
         amount: amount.to_string(),
         interval_secs: u64::try_from(interval).unwrap_or(0),
+        active,
     }
 }
 
@@ -333,11 +334,12 @@ mod tests {
             .parse()
             .unwrap();
 
-        let plan = map_plan(1, merchant, token, amount, U256::from(2_592_000u64));
+        let plan = map_plan(1, merchant, token, amount, U256::from(2_592_000u64), true);
 
         assert_eq!(plan.id, 1);
         assert_eq!(plan.amount, "123456789012345678901234567890");
         assert_eq!(plan.interval_secs, 2_592_000);
         assert_eq!(plan.merchant, "0x0000000000000000000000000000000000000001");
+        assert!(plan.active);
     }
 }
