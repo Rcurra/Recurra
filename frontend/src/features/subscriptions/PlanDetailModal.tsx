@@ -99,7 +99,7 @@ function PlanDetailContent({
     { label: 'Plan', value: `#${plan.id}` },
     { label: 'Cadence', value: `every ${intervalLabel(plan.intervalSecs)}` },
     ...(isMonthly ? [] : [{ label: 'Per month, roughly', value: `${formatUSDC(monthly)} USDC` }]),
-    { label: 'Max exposure', value: `${formatUSDC(plan.amount)} USDC / cycle` },
+    { label: 'Capped at', value: `${formatUSDC(plan.amount)} USDC / cycle` },
   ];
 
   // Portaled to <body>: the page content lives inside a z-10 stacking
@@ -112,8 +112,10 @@ function PlanDetailContent({
       aria-modal="true"
       aria-label="Plan details"
     >
-      {/* backdrop — click to close */}
-      <div className="absolute inset-0 bg-canvas/70 backdrop-blur-sm" onClick={onClose} />
+      {/* backdrop — click to close. FIXED, not absolute: inside a
+          scrollable wrapper an absolute backdrop scrolls away with the
+          content and exposes the page at the bottom (found live) */}
+      <div className="fixed inset-0 bg-canvas/70 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative my-auto w-full max-w-sm" style={{ animation: 'fadeUp 0.35s ease both' }}>
         <GlassPanel hairline className="p-6">
