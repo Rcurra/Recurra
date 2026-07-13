@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
-import { EscrowChart, VaultModal, VaultPanel } from '@/features/vault';
+import { OrbitalVault, VaultModal } from '@/features/vault';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
@@ -17,23 +17,16 @@ import {
   isPastDue,
   isUpcoming,
   monthlyEquivalent,
+  runwayLabel,
   shortAddress,
   timeUntil,
 } from '@/lib/format';
 import { getVaultBalance } from '@/lib/wallet';
 
-function PreviewBadge() {
-  return (
-    <span className="numeric rounded-full border border-line px-2 py-0.5 text-[9px] tracking-[0.14em] text-ink-faint">
-      PREVIEW
-    </span>
-  );
-}
-
-// Overview — three panels, room to breathe. The vault (the one gradient
-// panel) and the escrow chart share the top row; the subscriptions table
-// gets the full width below. Actions live inside the vault, where they
-// belong — open it.
+// Overview — the vault is a star system and it IS the page: balance at
+// the center like a sun, every active subscription an orbit whose moon's
+// position is real contract state (nextPaymentDue). The subscriptions
+// table below is the flat-list view of the same truth.
 export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
@@ -165,21 +158,39 @@ export default function OverviewPage() {
         </div>
       )}
 
-      <div
-        className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]"
-        style={{ animation: 'fadeUp 0.7s ease both' }}
-      >
-        {/* ── the vault — the one gradient panel ─────────────── */}
-        <VaultPanel onOpen={() => setVaultOpen(true)} balance={vaultBalance} />
+      {/* ── the vault — a star system ───────────────────────── */}
+      <div style={{ animation: 'fadeUp 0.7s ease both' }}>
+        <OrbitalVault
+          balance={vaultBalance}
+          orbiting={tableRows.flatMap((sub) => {
+            const plan = plans.get(sub.planId);
+            return plan ? [{ sub, plan }] : [];
+          })}
+          totalActive={active.length}
+          onOpenVault={() => setVaultOpen(true)}
+        />
+      </div>
 
-        {/* ── escrow over time ───────────────────────────────── */}
-        <GlassCard hairline className="p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <p className="numeric text-[11px] uppercase tracking-[0.2em] text-ink-faint">Escrow over time</p>
-            <PreviewBadge />
-          </div>
-          <EscrowChart />
-        </GlassCard>
+      {/* ── the numbers at a glance ──────────────────────────── */}
+      <div
+        className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3"
+        style={{ animation: 'fadeUp 0.7s ease both 0.08s' }}
+      >
+        {[
+          { label: 'Runway', value: runwayLabel(vaultBalance, monthly) ?? '—' },
+          { label: 'Monthly commitment', value: active.length ? `${formatUSDC(monthly)} USDC` : '—' },
+          {
+            label: 'Next charge',
+            value: nextDue
+              ? `${plans.get(nextDue.planId) ? formatUSDC(plans.get(nextDue.planId)!.amount) : '—'} USDC ${timeUntil(nextDue.nextPaymentDue)}`
+              : '—',
+          },
+        ].map((stat) => (
+          <GlassCard key={stat.label} className="px-5 py-4">
+            <p className="text-[9px] uppercase tracking-[0.2em] text-ink-faint">{stat.label}</p>
+            <p className="numeric mt-1.5 truncate text-sm text-ink">{stat.value}</p>
+          </GlassCard>
+        ))}
       </div>
 
       {/* ── subscriptions — rings as sparklines ──────────────── */}

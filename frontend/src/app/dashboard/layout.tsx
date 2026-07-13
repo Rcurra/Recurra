@@ -55,7 +55,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           Fixed wrapper (like the landing's) so the stars hold still while
           content scrolls, and drifting planets can't widen the page. */}
       <div className="pointer-events-none fixed inset-0" aria-hidden>
-        <Starfield />
+        <Starfield parallax />
       </div>
 
       {/* floating glass pill, same language as the landing/login nav */}

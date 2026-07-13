@@ -80,6 +80,21 @@ export function monthlyEquivalent(amount: bigint, intervalSecs: number): bigint 
   return (amount * 2_592_000n) / BigInt(Math.max(intervalSecs, 1));
 }
 
+// The runway sentence — balance ÷ 30-day-normalized commitments, spoken
+// in human time. Null when there's nothing to say (no balance yet, or no
+// active commitments to measure against). Display math only.
+export function runwayLabel(balance: bigint | null, monthly: bigint): string | null {
+  if (balance === null || monthly <= 0n) return null;
+  const totalDays = Number((balance * 30n) / monthly);
+  if (totalDays < 1) return 'not enough for the next charge';
+  const months = Math.floor(totalDays / 30);
+  const days = totalDays % 30;
+  if (months > 0) {
+    return `${months} month${months === 1 ? '' : 's'}${days > 0 ? ` ${days} day${days === 1 ? '' : 's'}` : ''}`;
+  }
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
+
 export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
