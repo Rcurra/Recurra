@@ -1,5 +1,6 @@
 'use client';
 
+import { GlassPanel } from '@/components/GlassPanel';
 import { Reveal } from './Reveal';
 import { T } from './tokens';
 
@@ -31,29 +32,28 @@ function StepCard({
   width?: string;
 }) {
   return (
-    <div
+    <GlassPanel
+      as="div"
       style={{
         width,
         padding: '13px 18px',
         borderRadius: 12,
-        border: `1px solid ${highlight ? T.violetLight : T.border}`,
-        background: T.cardGlass,
         textAlign: 'center',
+        ...(highlight ? { border: `1px solid ${T.borderBright}` } : null),
       }}
     >
       <div
-        className="numeric"
-        style={{
+                style={{
           fontSize: 11.5,
           letterSpacing: '0.1em',
-          color: highlight ? T.violetLight : T.text,
+          color: T.text,
           fontWeight: 600,
         }}
       >
         {label}
       </div>
       <div style={{ fontSize: 12, color: T.faint, marginTop: 6, lineHeight: 1.5 }}>{detail}</div>
-    </div>
+    </GlassPanel>
   );
 }
 
@@ -86,11 +86,10 @@ export function Lifecycle() {
         <h2
           style={{
             fontFamily: 'var(--font-display), sans-serif',
-            fontSize: 'clamp(26px, 3.6vw, 44px)',
+            fontSize: 'clamp(20px, 2.6vw, 32px)',
             fontWeight: 400,
-            lineHeight: 1.05,
-            letterSpacing: '0.01em',
-            textTransform: 'uppercase',
+            lineHeight: 1.2,
+            letterSpacing: '0.06em',
             margin: 0,
             color: T.headline,
           }}
@@ -125,8 +124,7 @@ export function Lifecycle() {
 
       <Reveal delay={0.3} style={{ marginTop: 26, textAlign: 'center' }}>
         <p
-          className="numeric"
-          style={{
+                    style={{
             fontSize: 12,
             letterSpacing: '0.1em',
             color: T.dim,
@@ -137,12 +135,10 @@ export function Lifecycle() {
         </p>
         <p
           style={{
-            fontFamily: 'var(--font-display), sans-serif',
-            fontSize: 'clamp(16px, 2vw, 20px)',
-            fontWeight: 400,
-            textTransform: 'uppercase',
-            letterSpacing: '0.02em',
-            color: T.mint,
+            fontSize: 'clamp(15px, 1.9vw, 19px)',
+            fontWeight: 600,
+            letterSpacing: '-0.01em',
+            color: T.text,
             margin: '10px 0 0',
           }}
         >

@@ -1,5 +1,6 @@
 'use client';
 
+import { GlassPanel } from '@/components/GlassPanel';
 import { Reveal } from './Reveal';
 import { T } from './tokens';
 
@@ -10,7 +11,6 @@ import { T } from './tokens';
 const SIDES = [
   {
     title: 'For subscribers',
-    accent: T.mint,
     intro:
       'Sign in with your email, subscribe with one signature, and your funds sit in an escrow that stays yours. Every charge is verified on-chain before money moves — and whatever hasn’t been charged is withdrawable to the cent, anytime.',
     steps: [
@@ -22,7 +22,6 @@ const SIDES = [
   },
   {
     title: 'For merchants',
-    accent: T.violetLight,
     intro:
       'Create a plan — token, amount, interval — and get paid on schedule without chasing anyone. Each charge executes against the plan stored on-chain: amount and recipient enforced by contract, never by a server that could be wrong or hacked.',
     steps: [
@@ -50,11 +49,10 @@ export function TwoSides() {
         <h2
           style={{
             fontFamily: 'var(--font-display), sans-serif',
-            fontSize: 'clamp(26px, 3.6vw, 44px)',
+            fontSize: 'clamp(20px, 2.6vw, 32px)',
             fontWeight: 400,
-            lineHeight: 1.05,
-            letterSpacing: '0.01em',
-            textTransform: 'uppercase',
+            lineHeight: 1.2,
+            letterSpacing: '0.06em',
             margin: 0,
             color: T.headline,
           }}
@@ -62,8 +60,7 @@ export function TwoSides() {
           Automated, but never trusted
         </h2>
         <p
-          className="numeric"
-          style={{
+                    style={{
             fontSize: 12,
             color: T.dim,
             letterSpacing: '0.18em',
@@ -87,24 +84,12 @@ export function TwoSides() {
       >
         {SIDES.map((side, i) => (
           <Reveal key={side.title} delay={i * 0.12}>
-            <div
-              style={{
-                height: '100%',
-                padding: '30px 28px',
-                borderRadius: 18,
-                border: `1px solid ${T.border}`,
-                background: T.cardGlass,
-                backdropFilter: 'blur(6px)',
-                textAlign: 'left',
-              }}
-            >
+            <GlassPanel as="div" style={{ height: '100%', padding: '30px 28px', textAlign: 'left' }}>
               <h3
                 style={{
-                  fontFamily: 'var(--font-display), sans-serif',
-                  fontSize: 21,
-                  fontWeight: 400,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
+                  fontSize: 19,
+                  fontWeight: 600,
+                  letterSpacing: '-0.01em',
                   margin: 0,
                   color: T.text,
                 }}
@@ -118,8 +103,7 @@ export function TwoSides() {
                 {side.steps.map((step) => (
                   <div
                     key={step}
-                    className="numeric"
-                    style={{
+                                        style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 12,
@@ -137,7 +121,7 @@ export function TwoSides() {
                         width: 5,
                         height: 5,
                         borderRadius: '50%',
-                        background: side.accent,
+                        background: T.text,
                         flexShrink: 0,
                       }}
                     />
@@ -145,7 +129,7 @@ export function TwoSides() {
                   </div>
                 ))}
               </div>
-            </div>
+            </GlassPanel>
           </Reveal>
         ))}
       </div>
