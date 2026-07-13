@@ -198,29 +198,20 @@ export function LoginScreen() {
             </>
           )}
 
-          <div className="mt-7 border-t border-line pt-5" style={{ animation: 'fadeUp 0.7s ease both 0.42s' }}>
-            {/* the selling point, on relay — each promise takes its turn
-                in the light (trustRelay, staggered thirds of the cycle) */}
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              {['No seed phrase', 'Fees covered', 'Withdraw anytime'].map((line, i) => (
-                <span
-                  key={line}
-                  className="trust-chip text-[10.5px] tracking-[0.04em]"
-                  style={{ animationDelay: `${i * 2.5}s` }}
-                >
-                  <span className="trust-dot" />
-                  {line}
-                </span>
-              ))}
-            </div>
+          {/* the selling point, streaming — the card's closing line rides
+              the ticker (its own hairlines stand in for a divider) */}
+          <div className="mt-7" style={{ animation: 'fadeUp 0.7s ease both 0.42s' }}>
+            <TickerLine message="No seed phrase · Fees covered · Withdraw anytime" />
           </div>
         </GlassPanel>
 
-        {/* the credit line earns its billing — the error ticker's stream,
-            off duty: same hairline marquee, none of the alarm */}
-        <div className="mt-6" style={{ animation: 'fadeUp 0.7s ease both 0.5s' }}>
-          <TickerLine message="Powered by Magic · secured by your inbox" />
-        </div>
+        {/* the credit line earns its billing — we're proud of the stack */}
+        <p
+          className="mt-6 text-center text-[11px] uppercase tracking-[0.22em] text-ink/80"
+          style={{ animation: 'fadeUp 0.7s ease both 0.5s' }}
+        >
+          Powered by Magic · secured by your inbox
+        </p>
       </div>
     </main>
   );
