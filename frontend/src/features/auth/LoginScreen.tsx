@@ -23,17 +23,23 @@ export function LoginScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Two error channels, deliberately: the form shows only login errors,
+  // the welcome-back card only sign-out errors. Found live: a login that
+  // timed out but then SUCCEEDED in the background flipped the view to
+  // welcome-back with the stale timeout complaint still showing — an
+  // error about a login that worked, on a screen it didn't belong to.
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
   const { login, logout, status, address } = useAuth();
   const router = useRouter();
 
   async function handleLogin() {
     if (!EMAIL_PATTERN.test(email)) {
-      setError('Enter a valid email address');
+      setLoginError('Enter a valid email address');
       return;
     }
     setLoading(true);
-    setError(null);
+    setLoginError(null);
     try {
       await Promise.race([
         login(email),
@@ -43,7 +49,7 @@ export function LoginScreen() {
       ]);
       router.push('/dashboard');
     } catch (err) {
-      setError(
+      setLoginError(
         err instanceof Error && err.message === 'login-timeout'
           ? "Couldn't reach the login service. Check your connection and try again — hotspots and VPNs sometimes block it."
           : err instanceof Error
@@ -57,7 +63,7 @@ export function LoginScreen() {
 
   async function handleSignOut() {
     setSigningOut(true);
-    setError(null);
+    setSignOutError(null);
     try {
       await Promise.race([
         logout(),
@@ -65,8 +71,11 @@ export function LoginScreen() {
           setTimeout(() => reject(new Error('logout-timeout')), 10_000),
         ),
       ]);
+      // fresh form after a real sign-out — no leftovers from last time
+      setLoginError(null);
+      setEmail('');
     } catch {
-      setError("Couldn't reach the login service to sign out. Check your connection and try again.");
+      setSignOutError("Couldn't reach the login service to sign out. Check your connection and try again.");
     } finally {
       setSigningOut(false);
     }
@@ -138,9 +147,9 @@ export function LoginScreen() {
               >
                 {signingOut ? 'Signing out…' : 'Sign out & use a different email'}
               </button>
-              {error && (
+              {signOutError && (
                 <div className="mt-4" style={{ animation: 'fadeUp 0.3s ease both' }}>
-                  <InlineError message={error} />
+                  <InlineError message={signOutError} />
                 </div>
               )}
             </div>
@@ -159,7 +168,7 @@ export function LoginScreen() {
               disabled={loading}
               onChange={(e) => {
                 setEmail(e.target.value);
-                if (error) setError(null);
+                if (loginError) setLoginError(null);
               }}
               onKeyDown={(e) => e.key === 'Enter' && email && !loading && handleLogin()}
               className="mb-4 w-full rounded-xl border border-line bg-canvas/70 px-4 py-3.5 text-sm text-ink transition placeholder:text-ink-faint focus:border-ink/40 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.06)] focus:outline-none disabled:opacity-60"
@@ -178,9 +187,9 @@ export function LoginScreen() {
             We&rsquo;ll email you a one-time code — no password, ever.
           </p>
 
-          {error && (
+          {loginError && (
             <div className="mt-4" style={{ animation: 'fadeUp 0.3s ease both' }}>
-              <InlineError message={error} />
+              <InlineError message={loginError} />
             </div>
           )}
             </>
