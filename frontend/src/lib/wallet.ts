@@ -172,14 +172,25 @@ const FRIENDLY_REVERTS: Record<string, string> = {
 // `.data.errorName` is the decoded custom error's real name (only resolves
 // if that error is declared in the ABI passed to the call — see
 // lib/contracts.ts's erc20Errors/registryAbi/vaultAbi error entries).
+const NETWORK_NOISE = /failed to fetch|-32603|http request failed|timed? ?out/i;
+const NETWORK_MESSAGE = "Couldn't reach the network. Check your connection and try again.";
+
 export function walletErrorMessage(error: unknown): string {
   if (error instanceof BaseError) {
     const reverted = error.walk((e) => e instanceof ContractFunctionRevertedError);
     const errorName = reverted instanceof ContractFunctionRevertedError ? reverted.data?.errorName : undefined;
     if (errorName) return FRIENDLY_REVERTS[errorName] ?? errorName;
+    // transport failures surface as raw JSON-RPC noise ("RPC Error:
+    // [-32603] Failed to fetch") — found live on a blocked hotspot; say
+    // it like a human instead
+    if (NETWORK_NOISE.test(error.shortMessage) || NETWORK_NOISE.test(error.message)) {
+      return NETWORK_MESSAGE;
+    }
     return error.shortMessage;
   }
-  if (error instanceof Error) return error.message;
+  if (error instanceof Error) {
+    return NETWORK_NOISE.test(error.message) ? NETWORK_MESSAGE : error.message;
+  }
   return 'Something went wrong';
 }
 
