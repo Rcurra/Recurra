@@ -168,5 +168,15 @@ export const usdcAbi = [
     ],
     outputs: [],
   },
+  {
+    name: 'transfer',
+    type: 'function',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
   ...erc20Errors,
 ] as const;

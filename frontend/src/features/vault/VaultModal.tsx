@@ -1,23 +1,32 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { GlassCard } from '@/components/GlassCard';
+import { createPortal } from 'react-dom';
+import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
-import { formatUSDC, parseUSDC, shortAddress, timeAgo } from '@/lib/format';
-import { MOCK_RECEIPTS } from '@/lib/mockData';
-import { approveAndDeposit, mintTestUsdc, walletErrorMessage, withdraw } from '@/lib/wallet';
-import { VaultDoor } from './VaultDoor';
+import { TxReceiptCard } from '@/components/TxReceiptCard';
+import { formatUSDC, parseUSDC } from '@/lib/format';
+import {
+  approveAndDeposit,
+  mintTestUsdc,
+  walletErrorMessage,
+  withdraw,
+  type TxReceipt,
+} from '@/lib/wallet';
 
 // The faucet is a dev/testnet-only escape hatch (MockUSDC.mint() is open
 // to anyone) — same flag the dev-signer path already gates on, so it can
 // never appear pointed at a real deploy.
 const isDevWallet = process.env.NEXT_PUBLIC_DEV_WALLET === '1';
 
-// The open vault. Funds, actions, the stat strip, and what moved through
-// Recurra this session — everything the card deliberately keeps behind
-// the door. Stats come in as props; the page already computes them.
-// Landscape, matching PlanDetailModal/SubDetailModal: the door center
-// stage on the left, the paperwork (input, actions, stats) on the right.
+type Done = { kind: 'deposit' | 'withdraw'; receipt: TxReceipt };
+
+// The open vault — single calm column in the wallet modal's anatomy:
+// balance, the plan facts, one amount, two actions. Every action that
+// moves money ends in the same chain-sourced receipt the wallet's Send
+// uses. The old clock-face door and the fake "session activity" preview
+// are gone — nothing decorative, nothing pretending.
+// Portaled to <body>, fixed backdrop: both modal scars healed from birth.
 export function VaultModal({
   open,
   onClose,
@@ -65,36 +74,29 @@ function VaultModalContent({
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState<'deposit' | 'withdraw' | 'mint' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [done, setDone] = useState<Done | null>(null);
 
   const amountUnits = parseUSDC(amount);
   const amountInvalid = amount.length > 0 && amountUnits === null;
   const canAct = address !== null && amountUnits !== null && amountUnits > 0n && busy === null;
-  const disabledReason = !address ? 'Not logged in' : amount.length === 0 ? 'Enter an amount above' : amountInvalid ? 'Enter a valid amount' : undefined;
+  const disabledReason = !address
+    ? 'Not logged in'
+    : amount.length === 0
+      ? 'Enter an amount above'
+      : amountInvalid
+        ? 'Enter a valid amount'
+        : undefined;
 
-  async function handleDeposit() {
+  async function run(kind: 'deposit' | 'withdraw') {
     if (!address || amountUnits === null) return;
-    setBusy('deposit');
+    setBusy(kind);
     setActionError(null);
     try {
-      await approveAndDeposit(address, amountUnits);
-      setAmount('');
-      onChanged();
-    } catch (e) {
-      setActionError(walletErrorMessage(e));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  // Clears on success, same as deposit — safe now that a disabled button
-  // always says why (title + the caption below), instead of silently
-  // doing nothing the way it did the first time a real user hit this.
-  async function handleWithdraw() {
-    if (!address || amountUnits === null) return;
-    setBusy('withdraw');
-    setActionError(null);
-    try {
-      await withdraw(address, amountUnits);
+      const receipt =
+        kind === 'deposit'
+          ? await approveAndDeposit(address, amountUnits)
+          : await withdraw(address, amountUnits);
+      setDone({ kind, receipt });
       setAmount('');
       onChanged();
     } catch (e) {
@@ -118,83 +120,135 @@ function VaultModalContent({
     }
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Vault"
     >
-      {/* backdrop — click to close */}
-      <div className="absolute inset-0 bg-canvas/70 backdrop-blur-sm" onClick={onClose} />
+      {/* fixed, not absolute — the veil must not scroll away with content */}
+      <div className="fixed inset-0 bg-canvas/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-2xl" style={{ animation: 'fadeUp 0.35s ease both' }}>
-        <GlassCard hairline className="max-h-[85vh] overflow-y-auto p-8">
+      <div className="relative my-auto w-full max-w-sm" style={{ animation: 'fadeUp 0.35s ease both' }}>
+        <GlassPanel hairline className="p-6">
           <button
             onClick={onClose}
             aria-label="Close vault"
-            className="absolute right-4 top-4 z-10 rounded-full border border-line px-2.5 py-1 text-sm text-ink-muted transition hover:border-danger/40 hover:text-danger"
+            className="absolute right-4 top-4 z-10 rounded-full border border-line px-2.5 py-1 text-sm text-ink-muted transition hover:border-ink/50 hover:text-ink"
           >
             ×
           </button>
 
-          <div className="grid grid-cols-1 items-center gap-8 sm:grid-cols-[auto_1fr]">
-            {/* ── the door, center stage ───────────────────────── */}
-            <div className="flex flex-col items-center text-center sm:pr-2">
-              <div className="relative flex items-center justify-center" style={{ width: 150, height: 150 }}>
-                {[0, 1].map((i) => (
-                  <div
-                    key={i}
-                    className="absolute inset-0 rounded-full border border-mint/30"
-                    style={{ animation: `shellWave ${7 + i * 3}s ease-out infinite ${i * 2.4}s` }}
-                  />
-                ))}
-                <VaultDoor size={110} />
+          <p className="text-[10px] uppercase tracking-[0.28em] text-ink-faint">
+            Vault — your escrow, always yours
+          </p>
+
+          {/* ── the balance ── */}
+          <p className="numeric mt-5 text-4xl font-light text-ink">
+            {balance === null ? '—' : formatUSDC(balance)}
+            <span className="pl-2 text-base text-ink-muted">USDC</span>
+          </p>
+          <p className="mt-1.5 text-[11px] font-light text-ink-muted">
+            always yours — withdraw anytime, to the cent.
+          </p>
+
+          {/* ── what it's covering ── */}
+          <dl className="mt-5 border-t border-line">
+            {[
+              { label: 'Active plans', value: stats.activePlans },
+              { label: 'Monthly total', value: stats.monthlyTotal },
+              { label: 'Next charge', value: stats.nextCharge },
+            ].map((s) => (
+              <div key={s.label} className="flex items-baseline justify-between gap-4 border-b border-line py-2">
+                <dt className="text-[10px] uppercase tracking-[0.16em] text-ink-faint">{s.label}</dt>
+                <dd className="numeric text-xs text-ink">{s.value}</dd>
               </div>
+            ))}
+          </dl>
 
-              {balance === null ? (
-                <p className="numeric mt-5 text-3xl font-semibold leading-none text-ink">
-                  —<span className="text-base text-ink-faint">.——</span>
-                </p>
-              ) : (
-                <p className="numeric mt-5 text-3xl font-semibold leading-none text-ink">
-                  {formatUSDC(balance).split('.')[0]}
-                  <span className="text-base text-ink-faint">.{formatUSDC(balance).split('.')[1]}</span>
-                </p>
-              )}
-              <p className="numeric mt-1.5 text-[10px] uppercase tracking-[0.2em] text-ink-faint">USDC escrow</p>
-              <p className="mt-3 text-[11px] text-ink-muted">always yours — withdraw anytime</p>
-            </div>
-
-            {/* ── the paperwork ────────────────────────────────── */}
-            <div>
-              <div className="flex items-center gap-2 rounded-lg border border-line bg-canvas/40 px-3 py-2">
-                <input
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  inputMode="decimal"
-                  className="numeric w-full bg-transparent text-lg text-ink outline-none placeholder:text-ink-faint"
-                />
-                <span className="numeric shrink-0 text-xs text-ink-faint">USDC</span>
-              </div>
-
-              <div className="mt-3 flex gap-2.5">
+          {done ? (
+            /* ── the receipt — same document as the wallet's Send ── */
+            <div className="mt-6">
+              <TxReceiptCard
+                title={done.kind === 'deposit' ? 'added to vault' : 'withdrawn'}
+                receipt={done.receipt}
+                rows={[
+                  { label: 'Amount', value: `${formatUSDC(done.receipt.amount)} USDC` },
+                  {
+                    label: done.kind === 'deposit' ? 'From your wallet' : 'From the vault',
+                    value: done.kind === 'deposit' ? (address ?? '—') : 'Recurra vault escrow',
+                    breakAll: true,
+                  },
+                  {
+                    label: done.kind === 'deposit' ? 'To the vault' : 'To your wallet',
+                    value: done.receipt.to,
+                    breakAll: true,
+                  },
+                ]}
+              />
+              <div className="mt-4 flex gap-2">
                 <button
-                  onClick={handleDeposit}
+                  onClick={() => setDone(null)}
+                  className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm text-ink-muted transition hover:border-ink/40 hover:text-ink"
+                >
+                  Another move
+                </button>
+                <button
+                  onClick={onClose}
+                  className="flex-1 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)]"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* ── the move — one amount, two directions ── */
+            <div className="mt-6">
+              <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+                Move funds
+              </p>
+              <div className="mb-3 flex gap-2">
+                <div className="flex w-full items-center gap-2 rounded-xl border border-line bg-canvas/60 px-4 py-3 transition focus-within:border-ink/40">
+                  <input
+                    value={amount}
+                    onChange={(e) => {
+                      setAmount(e.target.value);
+                      if (actionError) setActionError(null);
+                    }}
+                    disabled={busy !== null}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                    className="numeric w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-faint disabled:opacity-60"
+                  />
+                  <span className="numeric shrink-0 text-xs text-ink-faint">USDC</span>
+                </div>
+                <button
+                  onClick={() => balance !== null && setAmount(formatUSDC(balance))}
+                  disabled={busy !== null || balance === null || balance === 0n}
+                  title="Everything in the vault — for withdrawing it all"
+                  className="shrink-0 rounded-xl border border-line px-4 text-[11px] tracking-[0.08em] text-ink-muted transition hover:border-ink/40 hover:text-ink disabled:opacity-50"
+                >
+                  Max
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => run('deposit')}
                   disabled={!canAct}
                   title={disabledReason}
-                  className="rounded-lg bg-mint px-5 py-2.5 text-sm font-medium text-canvas transition disabled:opacity-40"
+                  className="flex-1 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold tracking-[0.02em] text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)] disabled:opacity-40 disabled:hover:shadow-none"
                 >
                   {busy === 'deposit' ? 'Signing…' : '+ Add funds'}
                 </button>
                 <button
-                  onClick={handleWithdraw}
+                  onClick={() => run('withdraw')}
                   disabled={!canAct}
                   title={disabledReason}
-                  className="rounded-lg border border-line px-5 py-2.5 text-sm text-ink transition disabled:opacity-40"
+                  className="flex-1 rounded-full border border-ink/30 bg-canvas/40 px-5 py-2.5 text-sm tracking-[0.02em] text-ink transition hover:border-ink/60 disabled:opacity-40"
                 >
-                  {busy === 'withdraw' ? 'Signing…' : 'Withdraw anytime'}
+                  {busy === 'withdraw' ? 'Signing…' : 'Withdraw'}
                 </button>
               </div>
 
@@ -202,64 +256,28 @@ function VaultModalContent({
                 <button
                   onClick={handleFaucet}
                   disabled={busy !== null || !address}
-                  className="mt-2.5 text-[11px] text-ink-faint underline decoration-dotted underline-offset-2 transition hover:text-ink disabled:opacity-40"
+                  className="mt-3 text-[11px] text-ink-faint underline decoration-dotted underline-offset-2 transition hover:text-ink disabled:opacity-40"
                 >
                   {busy === 'mint' ? 'Minting…' : 'dev faucet: mint 100 mUSDC'}
                 </button>
               )}
 
               {actionError ? (
-                <div className="mt-2">
+                <div className="mt-3">
                   <InlineError message={actionError} />
                 </div>
               ) : (
                 amount.length === 0 && (
-                  <p className="mt-2 text-[11px] text-ink-faint">enter an amount to add funds or withdraw</p>
+                  <p className="mt-3 text-center text-[11px] font-light text-ink-faint">
+                    enter an amount, then choose a direction — both end in a receipt.
+                  </p>
                 )
               )}
-
-              {/* stat strip */}
-              <div className="mt-5 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
-                {[
-                  { label: 'Active plans', value: stats.activePlans },
-                  { label: 'Monthly total', value: stats.monthlyTotal },
-                  { label: 'Next charge', value: stats.nextCharge },
-                ].map((s) => (
-                  <div key={s.label} className="bg-surface-2 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-wider text-ink-faint">{s.label}</p>
-                    <p className="numeric mt-1 text-sm text-ink">{s.value}</p>
-                  </div>
-                ))}
-              </div>
             </div>
-          </div>
-
-          {/* session activity — full width beneath, too dense for the side column */}
-          <div className="mt-6 border-t border-line pt-6">
-            <div className="mb-3 flex items-center gap-2">
-              <p className="numeric text-[10px] uppercase tracking-[0.24em] text-ink-faint">Session activity</p>
-              <span className="numeric rounded-full border border-line px-2 py-0.5 text-[9px] tracking-[0.14em] text-ink-faint">
-                PREVIEW
-              </span>
-            </div>
-            <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {MOCK_RECEIPTS.map((r) => (
-                <li key={r.id} className="flex items-center gap-3 rounded-xl border border-line bg-canvas/40 px-4 py-2.5">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-mint" style={{ boxShadow: '0 0 6px var(--mint)' }} />
-                  <p className="numeric min-w-0 flex-1 truncate text-xs text-ink">
-                    {formatUSDC(r.amount)} USDC
-                    <span className="text-ink-faint"> → {shortAddress(r.merchant)}</span>
-                  </p>
-                  <span className="numeric shrink-0 text-[11px] text-ink-muted">{timeAgo(r.paidAt)}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-[11px] text-ink-faint">
-              Sample rows — live session events arrive with F5 history.
-            </p>
-          </div>
-        </GlassCard>
+          )}
+        </GlassPanel>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -61,7 +61,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* floating glass pill, same language as the landing/login nav */}
       <header className="sticky top-4 z-20 flex justify-center px-4">
         <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-full border border-line bg-surface/75 px-5 py-2.5 backdrop-blur-xl">
-          <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
+          {/* the brand goes home — the hero page; Overview has its own tab */}
+          <Link href="/" className="flex shrink-0 items-center gap-2.5">
             <LogoMark />
             <span className="numeric text-sm font-semibold tracking-[0.12em] text-ink">RECURRA</span>
           </Link>

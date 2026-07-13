@@ -15,8 +15,11 @@ import {
   BaseError,
   ContractFunctionRevertedError,
   createPublicClient,
+  getAddress,
   http,
+  isAddress,
   parseEventLogs,
+  zeroAddress,
   type Abi,
   type Address,
   type PublicClient,
@@ -108,7 +111,7 @@ export async function approveAndDeposit(
   address: string,
   amount: bigint,
   onStep?: (step: 'approve' | 'deposit') => void,
-): Promise<void> {
+): Promise<TxReceipt> {
   const walletClient = requireWalletClient();
   const usdc = getUsdcAddress();
   const vault = getVaultAddress();
@@ -132,22 +135,25 @@ export async function approveAndDeposit(
   }
 
   onStep?.('deposit');
-  await writeContractSafely(walletClient, account, {
+  // the receipt is for the deposit — the tx where money actually moves
+  const receipt = await writeContractSafely(walletClient, account, {
     address: vault,
     abi: vaultAbi,
     functionName: 'deposit',
     args: [usdc, amount],
   });
+  return buildTxReceipt(receipt, vault, amount);
 }
 
-export async function withdraw(address: string, amount: bigint): Promise<void> {
+export async function withdraw(address: string, amount: bigint): Promise<TxReceipt> {
   const walletClient = requireWalletClient();
-  await writeContractSafely(walletClient, address as `0x${string}`, {
+  const receipt = await writeContractSafely(walletClient, address as `0x${string}`, {
     address: getVaultAddress(),
     abi: vaultAbi,
     functionName: 'withdraw',
     args: [getUsdcAddress(), amount],
   });
+  return buildTxReceipt(receipt, address, amount);
 }
 
 // Plain-English translations for the custom errors defined in
@@ -225,4 +231,69 @@ export async function getUsdcBalance(address: string): Promise<bigint> {
     functionName: 'balanceOf',
     args: [address as `0x${string}`],
   });
+}
+
+// The one action in the app that moves money OUT of Recurra's world
+// entirely — a plain ERC-20 transfer from the user's own wallet to any
+// address they type. F4.5's security rules, all enforced here at the
+// boundary, not just in the UI:
+// - destination must be a well-formed address (checksummed via
+//   getAddress) BEFORE anything is signed — a typo must fail loudly,
+//   never become unrecoverable
+// - explicit zero-address block, belt-and-suspenders over the token's own
+// - same simulate-then-write-then-check-receipt path as every other write
+// - NOT gated behind NEXT_PUBLIC_DEV_WALLET: unlike the mint faucet, a
+//   plain transfer works identically in dev and real mode
+//
+// PERMANENT SECURITY BOUNDARY (from frontend/plan.md F4.5): when the
+// ZeroDev session key lands in F4, this function must NEVER be delegated
+// to it. The session key's model is a fixed allowlist of known contracts;
+// "send to whatever the user typed" is fundamentally incompatible with
+// an allowlist. Send always requires a fresh, full owner signature — in
+// dev mode and Kernel mode alike. Not a UX preference; do not revisit.
+// Every money-moving call returns one of these — the receipt page's
+// facts, read back from the mined transaction and its block, never from
+// what a form believed.
+export type TxReceipt = {
+  hash: string;
+  to: string; // checksummed counterparty, as actually used on-chain
+  amount: bigint;
+  blockNumber: bigint;
+  timestamp: Date;
+};
+
+async function buildTxReceipt(
+  receipt: { transactionHash: `0x${string}`; blockNumber: bigint },
+  to: string,
+  amount: bigint,
+): Promise<TxReceipt> {
+  const block = await getPublicClient().getBlock({ blockNumber: receipt.blockNumber });
+  return {
+    hash: receipt.transactionHash,
+    to,
+    amount,
+    blockNumber: receipt.blockNumber,
+    timestamp: new Date(Number(block.timestamp) * 1000),
+  };
+}
+
+export async function transferUsdc(from: string, to: string, amount: bigint): Promise<TxReceipt> {
+  if (!isAddress(to)) {
+    throw new Error("That doesn't look like a valid address — check it and try again.");
+  }
+  const destination = getAddress(to); // checksummed, canonical
+  if (destination === zeroAddress) {
+    throw new Error('That is the zero address — funds sent there are gone forever.');
+  }
+  if (amount <= 0n) {
+    throw new Error('Enter an amount greater than zero.');
+  }
+  const walletClient = requireWalletClient();
+  const receipt = await writeContractSafely(walletClient, from as `0x${string}`, {
+    address: getUsdcAddress(),
+    abi: usdcAbi,
+    functionName: 'transfer',
+    args: [destination, amount],
+  });
+  return buildTxReceipt(receipt, destination, amount);
 }
