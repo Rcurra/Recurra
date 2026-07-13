@@ -107,11 +107,9 @@ export function LoginScreen() {
               <RecurraMark size={64} spin />
             </div>
             <div style={{ animation: 'fadeUp 0.7s ease both 0.18s' }}>
-              {/* the grand welcome — first words anyone reads in the app */}
-              <p
-                className="mb-2.5 text-[11.5px] uppercase tracking-[0.34em] text-ink/90"
-                style={{ textShadow: '0 0 20px rgba(255,255,255,0.25)' }}
-              >
+              {/* the grand welcome — first words anyone reads in the app,
+                  wearing the light sweep */}
+              <p className="shimmer mb-2.5 text-[11.5px] uppercase tracking-[0.34em]">
                 Welcome to Recurra
               </p>
               <h1

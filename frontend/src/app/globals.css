@@ -101,6 +101,40 @@ input:autofill {
   font-variant-numeric: tabular-nums;
 }
 
+/* The light sweep — a band of full white sliding across the lettering,
+   the one sun glinting off the words. Reserved for selling lines on the
+   theater surfaces (landing hero, login welcome); working screens stay
+   still. Slow enough to be an event, not a pattern. */
+@keyframes inkShimmer {
+  0% {
+    background-position: 130% 0;
+  }
+  55%,
+  100% {
+    background-position: -130% 0;
+  }
+}
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.82) 42%,
+    #ffffff 50%,
+    rgba(255, 255, 255, 0.82) 58%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: inkShimmer 7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+    background: none;
+    color: var(--ink);
+  }
+}
+
 /* The shared entrance — everything arrives the same way, everywhere. */
 @keyframes fadeUp {
   from {

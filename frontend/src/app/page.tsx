@@ -344,22 +344,22 @@ export default function LandingPage() {
             }}
           />
 
-          {/* the selling point — bright enough to sell. Raised after a
-              live readability review; these two lines ARE the pitch. */}
-          <p
-            style={{
-              fontSize: 14,
-              fontWeight: 400,
-              color: T.text,
-              letterSpacing: '0.3em',
-              margin: 0,
-              textTransform: 'uppercase',
-              textShadow: '0 0 24px rgba(255,255,255,0.25)',
-              animation: 'fadeUp 1s ease both 0.4s',
-            }}
-          >
-            Payments that run themselves
-          </p>
+          {/* the selling point — bright enough to sell, with the sun
+              sweeping across it (.shimmer). These two lines ARE the pitch. */}
+          <div style={{ animation: 'fadeUp 1s ease both 0.4s' }}>
+            <p
+              className="shimmer"
+              style={{
+                fontSize: 14,
+                fontWeight: 400,
+                letterSpacing: '0.3em',
+                margin: 0,
+                textTransform: 'uppercase',
+              }}
+            >
+              Payments that run themselves
+            </p>
+          </div>
           <p
             style={{
               fontSize: 12,
