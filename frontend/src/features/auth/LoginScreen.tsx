@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
+import { TickerLine } from '@/components/TickerLine';
 import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
 import { useAuth } from './AuthContext';
@@ -215,13 +216,11 @@ export function LoginScreen() {
           </div>
         </GlassPanel>
 
-        {/* the credit line earns its billing — we're proud of the stack */}
-        <p
-          className="mt-6 text-center text-[11px] uppercase tracking-[0.22em] text-ink/80"
-          style={{ animation: 'fadeUp 0.7s ease both 0.5s' }}
-        >
-          Powered by Magic · secured by your inbox
-        </p>
+        {/* the credit line earns its billing — the error ticker's stream,
+            off duty: same hairline marquee, none of the alarm */}
+        <div className="mt-6" style={{ animation: 'fadeUp 0.7s ease both 0.5s' }}>
+          <TickerLine message="Powered by Magic · secured by your inbox" />
+        </div>
       </div>
     </main>
   );
