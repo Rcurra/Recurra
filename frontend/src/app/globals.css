@@ -135,6 +135,48 @@ input:autofill {
   }
 }
 
+/* The trust relay — the promise chips take turns lighting up: each one
+   brightens to full white, holds a beat, and hands off to the next.
+   Points at every promise in turn without any of them shouting at once.
+   The dot inherits currentColor, so it glows with its chip. */
+@keyframes trustRelay {
+  0%,
+  30%,
+  100% {
+    color: rgba(255, 255, 255, 0.6);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
+  12% {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.12);
+  }
+}
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: rgba(255, 255, 255, 0.6);
+  animation: trustRelay 7.5s ease-in-out infinite;
+}
+.trust-chip .trust-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+@media (prefers-reduced-motion: reduce) {
+  .trust-chip {
+    animation: none;
+    color: rgba(255, 255, 255, 0.85);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+}
+
 /* The shared entrance — everything arrives the same way, everywhere. */
 @keyframes fadeUp {
   from {

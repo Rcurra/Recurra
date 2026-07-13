@@ -198,10 +198,16 @@ export function LoginScreen() {
           )}
 
           <div className="mt-7 border-t border-line pt-5" style={{ animation: 'fadeUp 0.7s ease both 0.42s' }}>
-            <div className="flex items-center justify-center gap-4">
-              {['No seed phrase', 'Fees covered', 'Withdraw anytime'].map((line) => (
-                <span key={line} className="flex items-center gap-1.5 text-[11px] font-light text-ink-faint">
-                  <span className="h-1 w-1 rounded-full bg-ink/70" />
+            {/* the selling point, on relay — each promise takes its turn
+                in the light (trustRelay, staggered thirds of the cycle) */}
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {['No seed phrase', 'Fees covered', 'Withdraw anytime'].map((line, i) => (
+                <span
+                  key={line}
+                  className="trust-chip text-[10.5px] tracking-[0.04em]"
+                  style={{ animationDelay: `${i * 2.5}s` }}
+                >
+                  <span className="trust-dot" />
                   {line}
                 </span>
               ))}
