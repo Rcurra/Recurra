@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
-import { Anton, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Chakra_Petch, JetBrains_Mono, Michroma } from "next/font/google";
 import { AuthProvider } from "@/features/auth";
 import "./globals.css";
 
-const sans = Space_Grotesk({
+// The type system, sharpened (2026-07-12): Michroma cuts the wordmark
+// and headings (engineered, Eurostile-blooded), Chakra Petch machines
+// the UI text (angular terminals, real weights), JetBrains Mono stays
+// strictly on data — numbers, amounts, addresses.
+const sans = Chakra_Petch({
+  weight: ["300", "400", "600"],
   variable: "--font-app-sans",
   subsets: ["latin"],
 });
@@ -13,8 +18,7 @@ const mono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
-// Display face for the landing's giant headline — tall, condensed, loud.
-const anton = Anton({
+const display = Michroma({
   weight: "400",
   variable: "--font-display",
   subsets: ["latin"],
@@ -33,7 +37,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${sans.variable} ${mono.variable} ${anton.variable} h-full antialiased`}
+      className={`${sans.variable} ${mono.variable} ${display.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>{children}</AuthProvider>

@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 import { T } from './tokens';
 
 // A thin cadence line across the very top of the viewport, filling as the
-// reader moves through the story. Same mint-to-violet gradient as the
-// footer hairline and the CadenceRing -- one motif, reused, not a new one.
+// reader moves through the story. Same white hairline register as the
+// footer rule -- one motif, reused, not a new one.
 export function ScrollProgress() {
   const [progress, setProgress] = useState(0);
 
@@ -41,7 +41,7 @@ export function ScrollProgress() {
         style={{
           height: '100%',
           width: `${progress * 100}%`,
-          background: `linear-gradient(90deg, ${T.mint}, ${T.violet})`,
+          background: 'linear-gradient(90deg, rgba(255,255,255,0.5), rgba(255,255,255,0.9))',
           transition: 'width 0.1s linear',
         }}
       />

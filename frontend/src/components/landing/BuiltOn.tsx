@@ -1,5 +1,6 @@
 'use client';
 
+import { GlassPanel } from '@/components/GlassPanel';
 import { Reveal } from './Reveal';
 import { T } from './tokens';
 
@@ -29,8 +30,7 @@ export function BuiltOn() {
     >
       <Reveal style={{ textAlign: 'center' }}>
         <p
-          className="numeric"
-          style={{
+                    style={{
             fontSize: 11,
             letterSpacing: '0.24em',
             color: T.faint,
@@ -54,21 +54,12 @@ export function BuiltOn() {
       >
         {STACK.map((s, i) => (
           <Reveal key={s.name} delay={i * 0.06}>
-            <div
-              style={{
-                height: '100%',
-                padding: '18px 20px',
-                borderRadius: 12,
-                border: `1px solid ${T.border}`,
-                background: T.cardGlass,
-                textAlign: 'left',
-              }}
-            >
-              <div className="numeric" style={{ fontSize: 13, letterSpacing: '0.06em', color: T.text, fontWeight: 600 }}>
+            <GlassPanel as="div" style={{ height: '100%', padding: '18px 20px', borderRadius: 12, textAlign: 'left' }}>
+              <div style={{ fontSize: 13, letterSpacing: '0.06em', color: T.text, fontWeight: 600 }}>
                 {s.name}
               </div>
               <div style={{ fontSize: 12.5, color: T.dim, marginTop: 6, lineHeight: 1.5 }}>{s.role}</div>
-            </div>
+            </GlassPanel>
           </Reveal>
         ))}
       </div>

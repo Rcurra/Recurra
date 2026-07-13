@@ -1,8 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { GlassPanel } from './GlassPanel';
 
-// The card language of the whole app — glass over the starfield, with the
-// mint→violet hairline reserved for section-level cards (one per card,
-// never on list rows; same restraint as the login card).
+// Legacy name for the app's card — now a thin alias over GlassPanel so
+// every existing card shares the single glass recipe. New code should
+// import GlassPanel directly; this stays until the app screens migrate.
 export function GlassCard({
   hairline = false,
   className = '',
@@ -15,17 +16,8 @@ export function GlassCard({
   children: ReactNode;
 }) {
   return (
-    <section
-      className={`relative overflow-hidden rounded-2xl border border-line bg-surface/75 backdrop-blur-xl ${className}`}
-      style={style}
-    >
-      {hairline && (
-        <div
-          className="absolute inset-x-0 top-0 h-px"
-          style={{ background: 'linear-gradient(90deg, transparent, var(--mint), var(--violet), transparent)' }}
-        />
-      )}
+    <GlassPanel hairline={hairline} className={className} style={style}>
       {children}
-    </section>
+    </GlassPanel>
   );
 }
