@@ -1,20 +1,45 @@
 @import "tailwindcss";
 
-/* Calm-finance tokens — dark only, by design (frontend/plan.md).
-   Every color in the app comes from here; components never hardcode. */
+/* Black & white glass — dark only, by design (frontend/plan.md).
+   Every color in the app comes from here; components never hardcode.
+
+   The palette is monochrome: white and its opacities over near-black.
+   The ONLY color in the product lives in the background orbs
+   (--orb-*), blurred far behind the glass. */
 :root {
-  --canvas: #06070b; /* landing-matched near-black */
-  --surface: #0e1017; /* cards */
-  --surface-2: #14171f; /* hover / nested */
-  --line: #1a1d27; /* hairline borders */
-  --ink: #f2f3f7; /* primary text */
-  --ink-muted: #9aa3b2; /* secondary text */
-  --ink-faint: #565c6b; /* tertiary / labels */
-  --mint: #00e5a0; /* brand accent A — money, life, ok-ness */
-  --mint-deep: #06251b; /* mint-tinted dark fill */
-  --violet: #6c5ce7; /* brand accent B — the automated, the scheduled */
-  --violet-light: #8b7df0;
+  --canvas: #000000; /* pure black — the stars and planets are the light */
+
+  /* the glass recipe — every panel, nav, and modal shares it */
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-bg-strong: rgba(255, 255, 255, 0.08); /* hover / nested */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-bright: rgba(255, 255, 255, 0.16);
+  --glass-blur: 20px;
+  --glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+  /* text — white, stepped down by opacity only */
+  --ink: #ffffff;
+  --ink-muted: rgba(255, 255, 255, 0.6);
+  --ink-faint: rgba(255, 255, 255, 0.38);
+
+  /* legacy slot names, remapped to monochrome so every existing
+     component lands on the new palette without a per-file sweep.
+     (The names retire as screens migrate to the glass tokens.) */
+  --surface: rgba(255, 255, 255, 0.05);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --surface-solid: #101013; /* opaque — autofill and other no-alpha spots */
+  --line: rgba(255, 255, 255, 0.08);
+  --mint: #ffffff;
+  --mint-deep: rgba(255, 255, 255, 0.08);
+  --violet: #ffffff;
+  --violet-light: rgba(255, 255, 255, 0.75);
   --danger: #f87171; /* errors only, never decoration */
+
+  /* background glows — monochrome only (user ruling 2026-07-11: no
+     color anywhere, period). Soft white light far behind the glass;
+     these are what backdrop-filter frosts against. */
+  --orb-glow: rgba(255, 255, 255, 0.05);
+  --orb-glow-dim: rgba(255, 255, 255, 0.03);
 }
 
 @theme inline {
@@ -50,21 +75,22 @@ body {
    back. The huge inset shadow covers the fill (important, because both the
    UA style and the Tailwind focus-shadow utility fight for box-shadow),
    the endless transition stops the white flash, and text-fill keeps our
-   ink color. */
+   ink color. Uses the opaque surface — a translucent white here would
+   blend over the UA's pale fill instead of covering it. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset !important;
-  box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-solid) inset !important;
+  box-shadow: 0 0 0 1000px var(--surface-solid) inset !important;
   -webkit-text-fill-color: var(--ink) !important;
   caret-color: var(--ink) !important;
-  background-color: var(--surface) !important;
+  background-color: var(--surface-solid) !important;
   background-clip: content-box !important;
   transition: background-color 999999s ease-in-out 0s !important;
 }
 input:autofill {
-  box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  box-shadow: 0 0 0 1000px var(--surface-solid) inset !important;
 }
 
 /* Numbers are always monospace — amounts, dates, addresses. */
@@ -118,4 +144,16 @@ input:autofill {
 
 .breathe {
   animation: breathe 4.5s ease-in-out infinite;
+}
+
+/* Background orbs — slow, huge, far behind the glass. The drift is
+   deliberately glacial; the orbs should be felt, never watched. */
+@keyframes orbDrift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(60px, -80px);
+  }
 }
