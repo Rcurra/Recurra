@@ -63,8 +63,18 @@ export default function DiscoverPage() {
           Discover
         </h1>
         <p className="mt-1.5 text-[11px] font-light tracking-[0.06em] text-ink-muted">
-          every plan the chain knows — subscribe once, it runs itself
+          subscribe once — payments run themselves, and the money stays yours
         </p>
+        {/* the login card's trust bullets, promoted to the storefront —
+            the same promises, kept in view where the deciding happens */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {['Cancel anytime', 'Withdraw anytime', 'Fees covered'].map((line) => (
+            <span key={line} className="flex items-center gap-1.5 text-[10.5px] font-light text-ink-faint">
+              <span className="h-1 w-1 rounded-full bg-ink/70" />
+              {line}
+            </span>
+          ))}
+        </div>
       </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
@@ -105,10 +115,15 @@ export default function DiscoverPage() {
         </section>
       )}
 
-      {/* ── the catalog — one panel per merchant, plans as rows ── */}
-      <div className="space-y-6" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
-        {Array.from(byMerchant.entries()).map(([merchant, merchantPlans]) => (
-          <GlassPanel key={merchant} hairline>
+      {/* ── the catalog — one panel per merchant, plans as rows,
+          arriving one after another like they're glad to be here ── */}
+      <div className="space-y-6">
+        {Array.from(byMerchant.entries()).map(([merchant, merchantPlans], mi) => (
+          <GlassPanel
+            key={merchant}
+            hairline
+            style={{ animation: `fadeUp 0.6s ease both ${0.12 + mi * 0.12}s` }}
+          >
             {/* merchant header — the planet is the identity */}
             <div className="flex items-center gap-3 px-6 pt-5 pb-4">
               <MerchantMark address={merchant} size={34} />
@@ -124,7 +139,7 @@ export default function DiscoverPage() {
                 rows scannable: every number sits in a lane, so the eye can
                 run straight down "what does this cost per month" */}
             <div className="hidden border-t border-line px-6 py-2 sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto] sm:gap-x-6">
-              {['Price', 'Every', '≈ per month', 'Max exposure', ''].map((h, i) => (
+              {['Price', 'Every', '≈ per month', 'Capped at', ''].map((h, i) => (
                 <span key={i} className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">
                   {h}
                 </span>
@@ -160,7 +175,9 @@ export default function DiscoverPage() {
                         <span className="numeric self-center text-[11px] text-ink-faint">
                           {formatUSDC(plan.amount)} USDC / cycle
                         </span>
-                        <span className="self-center text-[11px] tracking-[0.08em] text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-ink">
+                        {/* an invitation, not a disclosure — the chip fills
+                            white the moment the cursor considers it */}
+                        <span className="self-center rounded-full border border-line px-3.5 py-1.5 text-[11px] tracking-[0.06em] text-ink-muted transition group-hover:border-ink group-hover:bg-ink group-hover:font-semibold group-hover:text-canvas">
                           Subscribe →
                         </span>
                       </button>
