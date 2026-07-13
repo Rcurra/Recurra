@@ -1,8 +1,14 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+
 // The night sky — pure black & white. Twinkling stars of varied size and
 // brightness plus (optionally) a few small ringed planets. Same visual
 // language as the landing: every planet wears a tilted ring, and the ring
 // is what pulses — the body holds still. Packaged for any screen that
-// wants the universe behind it.
+// wants the universe behind it. With `parallax`, the sky answers the
+// scroll the way the landing's does: stars barely shift, planets sweep
+// further the bigger (closer) they are — flying through, not past.
 
 // deterministic pseudo-random — integer bit-mixing only (trig-based hashes
 // hydration-mismatch between Node's and Chrome's V8)
@@ -60,13 +66,45 @@ export function Starfield({
   shootingStars = false,
   orbit = false,
   nebula = false,
+  parallax = false,
 }: {
   stars?: number;
   planets?: boolean;
   shootingStars?: boolean;
   orbit?: boolean;
   nebula?: boolean;
+  parallax?: boolean;
 }) {
+  // scroll parallax — the landing's exact recipe: one rAF-throttled
+  // listener, stars barely move, each planet by its own depth factor
+  const starLayerRef = useRef<HTMLDivElement>(null);
+  const planetRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!parallax) return;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (starLayerRef.current) {
+          starLayerRef.current.style.transform = `translateY(${y * 0.03}px)`;
+        }
+        planetRefs.current.forEach((el, i) => {
+          if (!el) return;
+          const factor = 0.05 + (PLANETS[i].size / 11) * 0.15;
+          el.style.transform = `translateY(${y * factor}px)`;
+        });
+        frame = 0;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [parallax]);
+
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
       <style>{`
@@ -225,6 +263,7 @@ export function Starfield({
           </svg>
         ))}
 
+      <div ref={starLayerRef} className="absolute inset-0">
       {Array.from({ length: stars }).map((_, i) => (
         <div
           key={i}
@@ -247,18 +286,22 @@ export function Starfield({
           }}
         />
       ))}
+      </div>
 
       {planets &&
         PLANETS.map((p, i) => (
-          <svg
+          <div
             key={i}
+            ref={(el) => {
+              planetRefs.current[i] = el;
+            }}
+            style={{ position: 'absolute', left: p.left, top: p.top }}
+          >
+          <svg
             width={p.size * 4}
             height={p.size * 4}
             viewBox="0 0 40 40"
             style={{
-              position: 'absolute',
-              left: p.left,
-              top: p.top,
               overflow: 'visible',
               animation: `sfDrift ${p.dur}s ease-in-out infinite ${i * 2.1}s`,
             }}
@@ -304,6 +347,7 @@ export function Starfield({
               </g>
             </g>
           </svg>
+          </div>
         ))}
     </div>
   );
