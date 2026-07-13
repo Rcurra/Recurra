@@ -248,7 +248,15 @@ export async function getUsdcBalance(address: string): Promise<bigint> {
 // "send to whatever the user typed" is fundamentally incompatible with
 // an allowlist. Send always requires a fresh, full owner signature — in
 // dev mode and Kernel mode alike. Not a UX preference; do not revisit.
-export async function transferUsdc(from: string, to: string, amount: bigint): Promise<void> {
+export type SendReceipt = {
+  hash: string;
+  to: string; // checksummed destination, as actually sent
+  amount: bigint;
+  blockNumber: bigint;
+  timestamp: Date;
+};
+
+export async function transferUsdc(from: string, to: string, amount: bigint): Promise<SendReceipt> {
   if (!isAddress(to)) {
     throw new Error("That doesn't look like a valid address — check it and try again.");
   }
@@ -260,10 +268,20 @@ export async function transferUsdc(from: string, to: string, amount: bigint): Pr
     throw new Error('Enter an amount greater than zero.');
   }
   const walletClient = requireWalletClient();
-  await writeContractSafely(walletClient, from as `0x${string}`, {
+  const receipt = await writeContractSafely(walletClient, from as `0x${string}`, {
     address: getUsdcAddress(),
     abi: usdcAbi,
     functionName: 'transfer',
     args: [destination, amount],
   });
+  // the receipt page's facts come from the chain, not from what the form
+  // believed — block timestamp included
+  const block = await getPublicClient().getBlock({ blockNumber: receipt.blockNumber });
+  return {
+    hash: receipt.transactionHash,
+    to: destination,
+    amount,
+    blockNumber: receipt.blockNumber,
+    timestamp: new Date(Number(block.timestamp) * 1000),
+  };
 }

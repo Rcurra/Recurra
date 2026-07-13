@@ -6,7 +6,8 @@ import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
 import { LoadingLine } from '@/components/LoadingLine';
 import { formatUSDC, parseUSDC } from '@/lib/format';
-import { getUsdcBalance, transferUsdc, walletErrorMessage } from '@/lib/wallet';
+import { getChain } from '@/lib/chain';
+import { getUsdcBalance, transferUsdc, walletErrorMessage, type SendReceipt } from '@/lib/wallet';
 
 type Phase = 'idle' | 'confirm' | 'sending' | 'done' | 'error';
 
@@ -51,6 +52,7 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [receipt, setReceipt] = useState<SendReceipt | null>(null);
 
   const refetchBalance = useCallback(() => {
     getUsdcBalance(address)
@@ -83,13 +85,22 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
     setError(null);
     setPhase('sending');
     try {
-      await transferUsdc(address, to.trim(), amount);
+      const r = await transferUsdc(address, to.trim(), amount);
+      setReceipt(r);
       setPhase('done');
       refetchBalance();
     } catch (e) {
       setError(walletErrorMessage(e));
       setPhase('error');
     }
+  }
+
+  function resetForAnotherSend() {
+    setReceipt(null);
+    setTo('');
+    setAmountInput('');
+    setError(null);
+    setPhase('idle');
   }
 
   return createPortal(
@@ -142,8 +153,69 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
             </button>
           </div>
 
+          {/* ── the receipt — every fact of what just left, from the
+              chain itself, not from what the form believed ── */}
+          {phase === 'done' && receipt && (
+            <div className="mt-6">
+              <div className="mb-3 flex items-baseline justify-between">
+                <p className="text-[10px] uppercase tracking-[0.28em] text-ink/90">Receipt — sent ✓</p>
+                <p className="numeric text-[10px] text-ink-faint">{getChain().name}</p>
+              </div>
+              <div className="rounded-xl border border-ink/25 bg-canvas/60">
+                <dl>
+                  {[
+                    { label: 'Amount', value: `${formatUSDC(receipt.amount)} USDC`, mono: true },
+                    { label: 'From', value: address, mono: true, breakAll: true },
+                    { label: 'To', value: receipt.to, mono: true, breakAll: true },
+                    { label: 'Transaction', value: receipt.hash, mono: true, breakAll: true },
+                    { label: 'Block', value: `#${receipt.blockNumber.toString()}`, mono: true },
+                    { label: 'When', value: receipt.timestamp.toLocaleString(), mono: true },
+                  ].map((row, i, arr) => (
+                    <div
+                      key={row.label}
+                      className={`px-4 py-2.5 ${i < arr.length - 1 ? 'border-b border-line' : ''}`}
+                    >
+                      <dt className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">{row.label}</dt>
+                      <dd
+                        className={`mt-0.5 text-[11px] leading-relaxed text-ink ${row.mono ? 'numeric' : ''} ${
+                          row.breakAll ? 'break-all' : ''
+                        }`}
+                      >
+                        {row.value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+              {getChain().blockExplorers?.default && (
+                <a
+                  href={`${getChain().blockExplorers!.default.url}/tx/${receipt.hash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 block text-center text-[11px] tracking-[0.08em] text-ink-muted transition hover:text-ink"
+                >
+                  View on {getChain().blockExplorers!.default.name} →
+                </a>
+              )}
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={resetForAnotherSend}
+                  className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm text-ink-muted transition hover:border-ink/40 hover:text-ink"
+                >
+                  Send more
+                </button>
+                <button
+                  onClick={onClose}
+                  className="flex-1 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)]"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── send — the door out ── */}
-          {phase !== 'confirm' && (
+          {phase !== 'confirm' && phase !== 'done' && (
             <div className="mt-6">
               <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
                 Send USDC anywhere
@@ -184,14 +256,9 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
                 disabled={!canReview}
                 className="w-full rounded-full bg-ink px-5 py-2.5 text-sm font-semibold tracking-[0.04em] text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)] disabled:opacity-40 disabled:hover:shadow-none"
               >
-                {phase === 'done' ? 'Sent ✓' : busy ? 'Sending…' : 'Review send'}
+                {busy ? 'Sending…' : 'Review send'}
               </button>
 
-              {phase === 'done' && (
-                <p className="numeric mt-2 text-center text-[11px] text-ink-muted">
-                  On its way. Your balance is updated above.
-                </p>
-              )}
               {amount !== null && balance !== null && amount > balance && (
                 <p className="mt-2 text-center text-[11px] text-ink-faint">
                   That&rsquo;s more than your wallet holds.

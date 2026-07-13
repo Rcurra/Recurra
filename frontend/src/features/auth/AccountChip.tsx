@@ -17,13 +17,21 @@ export function AccountChip() {
 
   return (
     <>
+      {/* structured in three beats — a breathing dot (the wallet is
+          live), a bold tracked label, the address in full weight — and
+          the invitation grammar on hover: the whole chip fills white */}
       <button
         onClick={() => setOpen(true)}
         title="Your wallet"
-        className="numeric flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs text-ink-muted transition hover:border-ink/40 hover:text-ink"
+        className="group flex items-center gap-2.5 rounded-full border border-ink/25 bg-surface px-4 py-2 transition hover:border-ink hover:bg-ink hover:shadow-[0_4px_20px_-4px_rgba(255,255,255,0.35)]"
       >
-        <span className="text-[10px] uppercase tracking-[0.14em] text-ink-faint">Wallet</span>
-        {shortAddress(address)}
+        <span className="breathe h-1.5 w-1.5 rounded-full bg-ink transition group-hover:bg-canvas" />
+        <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-ink transition group-hover:text-canvas">
+          Wallet
+        </span>
+        <span className="numeric text-xs font-semibold text-ink-muted transition group-hover:text-canvas">
+          {shortAddress(address)}
+        </span>
       </button>
       <WalletModal open={open} address={address} onClose={() => setOpen(false)} />
     </>
