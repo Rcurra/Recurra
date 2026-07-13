@@ -6,22 +6,23 @@ import { PlanDetailModal, useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
-import { GlassCard } from '@/components/GlassCard';
+import { GlassPanel } from '@/components/GlassPanel';
 import { LoadingLine } from '@/components/LoadingLine';
 import { MerchantMark } from '@/components/MerchantMark';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
 
 const MONTH_SECS = 2_592_000;
 
-// Discover — plans grouped under their merchant, each merchant wearing a
-// deterministic planet mark (same address, same planet, everywhere). The
-// chain has no plan names, so the cards lead with what it does know:
-// price, cadence, and a per-month equivalent so a weekly plan and a
-// monthly plan compare at a glance.
+// Discover — one glass panel per merchant, plans as quiet rows inside it
+// (a catalog reads like a ledger, not an app store). The merchant's
+// deterministic planet mark is the identity; each row leads with what
+// the chain actually knows: price, cadence, per-month equivalent, max
+// exposure. The row itself is the button — no white slabs shouting
+// "subscribe" four times per screen; the modal holds the real action.
 //
-// Two sides: plans you're already subscribed to (re-subscribing would
-// just revert AlreadySubscribed) get their own section pointing at
-// Subscriptions to manage them, separate from the rest to actually browse.
+// Two sides: plans you're already on (re-subscribing would just revert
+// AlreadySubscribed) get a compact strip pointing at Subscriptions,
+// separate from what's actually browsable.
 export default function DiscoverPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -42,9 +43,8 @@ export default function DiscoverPage() {
 
   const yourPlans = plans.filter((p) => subscribedPlanIds.has(p.id));
   // Browsable-only: a deactivated plan can't accept new subscribe() calls
-  // (PlanNotActive), so it has no business showing up here — but a plan you
-  // already hold stays in "Your subscriptions" above even if the merchant
-  // deactivates it later, since you still need to see/manage it.
+  // (PlanNotActive) — but a plan you already hold stays visible above even
+  // if the merchant deactivates it later; you still need to manage it.
   const otherPlans = plans.filter((p) => !subscribedPlanIds.has(p.id) && p.active);
 
   // group by merchant, insertion-ordered
@@ -57,138 +57,98 @@ export default function DiscoverPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
-      <p
-        className="numeric mb-8 text-[11px] uppercase tracking-[0.24em] text-ink-faint"
-        style={{ animation: 'fadeUp 0.7s ease both' }}
+      <h1
+        className="mb-8 text-lg text-ink"
+        style={{ fontFamily: 'var(--font-display), sans-serif', letterSpacing: '0.08em', animation: 'fadeUp 0.7s ease both' }}
       >
         Discover
-      </p>
+      </h1>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
       {loading && !error && <LoadingLine label="loading plans…" />}
 
       {!loading && !error && plans.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-line bg-surface/50 p-12 text-center">
+        <GlassPanel className="p-12 text-center">
           <p className="text-sm text-ink-muted">No plans yet.</p>
-        </div>
+        </GlassPanel>
       )}
 
-      {/* ── side one: what you're already on ─────────────────── */}
+      {/* ── what you're already on — a quiet strip, not a storefront ── */}
       {yourPlans.length > 0 && (
-        <section className="mb-10" style={{ animation: 'fadeUp 0.7s ease both' }}>
-          <p className="numeric mb-4 text-[11px] uppercase tracking-[0.2em] text-mint">
-            Your subscriptions
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {yourPlans.map((plan) => {
-              const isMonthly = plan.intervalSecs === MONTH_SECS;
-              return (
-                <GlassCard key={plan.id} hairline className="p-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <MerchantMark address={plan.merchant} size={30} />
-                      <div>
-                        <p className="numeric text-2xl font-semibold text-ink">
-                          {formatUSDC(plan.amount)}
-                          <span className="ml-1.5 text-sm font-normal text-ink-muted">USDC</span>
-                        </p>
-                        <p className="numeric text-[11px] uppercase tracking-[0.14em] text-ink-faint">
-                          every {intervalLabel(plan.intervalSecs)}{!isMonthly && ` · plan #${plan.id}`}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="numeric shrink-0 rounded-full border border-mint/40 bg-mint-deep px-2.5 py-1 text-[10px] text-mint">
-                      subscribed
+        <section className="mb-8" style={{ animation: 'fadeUp 0.7s ease both' }}>
+          <GlassPanel className="px-6 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-ink-faint">On your vault</p>
+                {yourPlans.map((plan) => (
+                  <span key={plan.id} className="flex items-center gap-2">
+                    <MerchantMark address={plan.merchant} size={18} />
+                    <span className="numeric text-xs text-ink">
+                      {formatUSDC(plan.amount)}
+                      <span className="text-ink-faint"> / {intervalLabel(plan.intervalSecs)}</span>
                     </span>
-                  </div>
-
-                  <Link
-                    href="/dashboard/subscriptions"
-                    className="mt-4 block w-full rounded-lg border border-line px-4 py-2.5 text-center text-sm text-ink transition hover:border-[#282c39]"
-                  >
-                    Manage in Subscriptions →
-                  </Link>
-                </GlassCard>
-              );
-            })}
-          </div>
+                  </span>
+                ))}
+              </div>
+              <Link
+                href="/dashboard/subscriptions"
+                className="text-[11px] tracking-[0.08em] text-ink-muted transition hover:text-ink"
+              >
+                Manage →
+              </Link>
+            </div>
+          </GlassPanel>
         </section>
       )}
 
-      {/* ── side two: what's left to browse (only needs its own label
-          once side one exists — otherwise the page eyebrow already says
-          "Discover") ───────────────────────────────────────────────── */}
-      {yourPlans.length > 0 && otherPlans.length > 0 && (
-        <p className="numeric mb-4 text-[11px] uppercase tracking-[0.2em] text-ink-faint">Discover more</p>
-      )}
-
-      <div className="space-y-10" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
+      {/* ── the catalog — one panel per merchant, plans as rows ── */}
+      <div className="space-y-6" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
         {Array.from(byMerchant.entries()).map(([merchant, merchantPlans]) => (
-          <section key={merchant}>
+          <GlassPanel key={merchant} hairline>
             {/* merchant header — the planet is the identity */}
-            <div className="mb-4 flex items-center gap-3">
-              <MerchantMark address={merchant} size={30} />
+            <div className="flex items-center gap-3 px-6 pt-5 pb-4">
+              <MerchantMark address={merchant} size={34} />
               <div>
                 <p className="numeric text-sm text-ink">{shortAddress(merchant)}</p>
-                <p className="numeric text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-ink-faint">
                   merchant · {merchantPlans.length} plan{merchantPlans.length === 1 ? '' : 's'}
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ul>
               {merchantPlans.map((plan) => {
                 const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
                 const isMonthly = plan.intervalSecs === MONTH_SECS;
                 return (
-                  <button
-                    key={plan.id}
-                    onClick={() => setSelected(plan)}
-                    aria-haspopup="dialog"
-                    className="block text-left"
-                  >
-                  <GlassCard
-                    hairline
-                    className="group h-full p-5 transition-all duration-300 hover:-translate-y-1 hover:border-[#282c39]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="numeric text-2xl font-semibold text-ink">
-                          {formatUSDC(plan.amount)}
-                          <span className="ml-1.5 text-sm font-normal text-ink-muted">USDC</span>
-                        </p>
-                        <p className="numeric mt-0.5 text-[11px] uppercase tracking-[0.14em] text-ink-faint">
-                          every {intervalLabel(plan.intervalSecs)}
-                        </p>
-                      </div>
-                      <span className="numeric shrink-0 rounded-full border border-line px-2.5 py-1 text-[10px] text-ink-faint">
-                        plan #{plan.id}
+                  <li key={plan.id} className="border-t border-line">
+                    <button
+                      onClick={() => setSelected(plan)}
+                      aria-haspopup="dialog"
+                      className="group flex w-full flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4 text-left transition hover:bg-ink/[0.04]"
+                    >
+                      <span className="numeric min-w-[130px] text-lg text-ink">
+                        {formatUSDC(plan.amount)}
+                        <span className="pl-1.5 text-xs text-ink-muted">
+                          USDC / {intervalLabel(plan.intervalSecs)}
+                        </span>
                       </span>
-                    </div>
-
-                    <div className="mt-4 space-y-1.5 border-t border-line pt-3">
-                      {!isMonthly && (
-                        <p className="text-[11px] text-ink-muted">
-                          ≈ <span className="numeric text-ink">{formatUSDC(monthly)} USDC</span> / month
-                        </p>
-                      )}
-                      <p className="text-[11px] text-ink-faint">
-                        max exposure: one cycle = {formatUSDC(plan.amount)} USDC
-                      </p>
-                    </div>
-
-                    {/* span, not button — this whole card is already a
-                        button; the real Subscribe action lives in the modal */}
-                    <span className="mt-4 block w-full rounded-lg bg-mint px-4 py-2.5 text-center text-sm font-medium text-canvas transition group-hover:brightness-110">
-                      View & subscribe →
-                    </span>
-                  </GlassCard>
-                  </button>
+                      <span className="numeric flex-1 text-[11px] text-ink-faint">
+                        {!isMonthly && (
+                          <span className="pr-4">≈ {formatUSDC(monthly)} USDC / month</span>
+                        )}
+                        max exposure {formatUSDC(plan.amount)} USDC / cycle
+                      </span>
+                      <span className="text-[11px] tracking-[0.08em] text-ink-muted transition group-hover:text-ink">
+                        View & subscribe →
+                      </span>
+                    </button>
+                  </li>
                 );
               })}
-            </div>
-          </section>
+            </ul>
+          </GlassPanel>
         ))}
       </div>
 
