@@ -11,8 +11,6 @@ import { LoadingLine } from '@/components/LoadingLine';
 import { MerchantMark } from '@/components/MerchantMark';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
 
-const MONTH_SECS = 2_592_000;
-
 // Discover — one glass panel per merchant, plans as quiet rows inside it
 // (a catalog reads like a ledger, not an app store). The merchant's
 // deterministic planet mark is the identity; each row leads with what
@@ -57,12 +55,27 @@ export default function DiscoverPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
-      <h1
-        className="mb-8 text-lg text-ink"
-        style={{ fontFamily: 'var(--font-display), sans-serif', letterSpacing: '0.08em', animation: 'fadeUp 0.7s ease both' }}
-      >
-        Discover
-      </h1>
+      <div className="mb-8" style={{ animation: 'fadeUp 0.7s ease both' }}>
+        <h1
+          className="text-lg text-ink"
+          style={{ fontFamily: 'var(--font-display), sans-serif', letterSpacing: '0.08em' }}
+        >
+          Discover
+        </h1>
+        <p className="mt-1.5 text-xs tracking-[0.06em] text-ink/85">
+          subscribe once — payments run themselves, and the money stays yours
+        </p>
+        {/* the login card's trust bullets, promoted to the storefront —
+            the selling point, bright enough to sell */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {['Cancel anytime', 'Withdraw anytime', 'Fees covered'].map((line) => (
+            <span key={line} className="flex items-center gap-1.5 text-[11px] text-ink/85">
+              <span className="h-1 w-1 rounded-full bg-ink" />
+              {line}
+            </span>
+          ))}
+        </div>
+      </div>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -102,10 +115,15 @@ export default function DiscoverPage() {
         </section>
       )}
 
-      {/* ── the catalog — one panel per merchant, plans as rows ── */}
-      <div className="space-y-6" style={{ animation: 'fadeUp 0.7s ease both 0.12s' }}>
-        {Array.from(byMerchant.entries()).map(([merchant, merchantPlans]) => (
-          <GlassPanel key={merchant} hairline>
+      {/* ── the catalog — one panel per merchant, plans as rows,
+          arriving one after another like they're glad to be here ── */}
+      <div className="space-y-6">
+        {Array.from(byMerchant.entries()).map(([merchant, merchantPlans], mi) => (
+          <GlassPanel
+            key={merchant}
+            hairline
+            style={{ animation: `fadeUp 0.6s ease both ${0.12 + mi * 0.12}s` }}
+          >
             {/* merchant header — the planet is the identity */}
             <div className="flex items-center gap-3 px-6 pt-5 pb-4">
               <MerchantMark address={merchant} size={34} />
@@ -117,36 +135,55 @@ export default function DiscoverPage() {
               </div>
             </div>
 
+            {/* column headers — the instrument-panel move that makes the
+                rows scannable: every number sits in a lane, so the eye can
+                run straight down "what does this cost per month" */}
+            <div className="hidden border-t border-line px-6 py-2 sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto] sm:gap-x-6">
+              {['Price', 'Every', '≈ per month', 'Capped at', ''].map((h, i) => (
+                <span key={i} className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">
+                  {h}
+                </span>
+              ))}
+            </div>
+
             <ul>
-              {merchantPlans.map((plan) => {
-                const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
-                const isMonthly = plan.intervalSecs === MONTH_SECS;
-                return (
-                  <li key={plan.id} className="border-t border-line">
-                    <button
-                      onClick={() => setSelected(plan)}
-                      aria-haspopup="dialog"
-                      className="group flex w-full flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4 text-left transition hover:bg-ink/[0.04]"
-                    >
-                      <span className="numeric min-w-[130px] text-lg text-ink">
-                        {formatUSDC(plan.amount)}
-                        <span className="pl-1.5 text-xs text-ink-muted">
-                          USDC / {intervalLabel(plan.intervalSecs)}
+              {[...merchantPlans]
+                .sort(
+                  (a, b) =>
+                    Number(monthlyEquivalent(a.amount, a.intervalSecs)) -
+                    Number(monthlyEquivalent(b.amount, b.intervalSecs)),
+                )
+                .map((plan) => {
+                  const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
+                  return (
+                    <li key={plan.id} className="border-t border-line">
+                      <button
+                        onClick={() => setSelected(plan)}
+                        aria-haspopup="dialog"
+                        className="group flex w-full flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4 text-left transition hover:bg-ink/[0.04] sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto]"
+                      >
+                        <span className="numeric text-lg leading-none text-ink">
+                          {formatUSDC(plan.amount)}
+                          <span className="pl-1.5 text-[10px] text-ink-faint">USDC</span>
                         </span>
-                      </span>
-                      <span className="numeric flex-1 text-[11px] text-ink-faint">
-                        {!isMonthly && (
-                          <span className="pr-4">≈ {formatUSDC(monthly)} USDC / month</span>
-                        )}
-                        max exposure {formatUSDC(plan.amount)} USDC / cycle
-                      </span>
-                      <span className="text-[11px] tracking-[0.08em] text-ink-muted transition group-hover:text-ink">
-                        View & subscribe →
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
+                        <span className="numeric self-center text-[11px] text-ink-muted">
+                          {intervalLabel(plan.intervalSecs)}
+                        </span>
+                        <span className="numeric self-center text-[11px] text-ink-muted">
+                          {formatUSDC(monthly)} USDC
+                        </span>
+                        <span className="numeric self-center text-[11px] text-ink-faint">
+                          {formatUSDC(plan.amount)} USDC / cycle
+                        </span>
+                        {/* an invitation, not a disclosure — the chip fills
+                            white the moment the cursor considers it */}
+                        <span className="self-center rounded-full border border-line px-3.5 py-1.5 text-[11px] tracking-[0.06em] text-ink-muted transition group-hover:border-ink group-hover:bg-ink group-hover:font-semibold group-hover:text-canvas">
+                          Subscribe →
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
             </ul>
           </GlassPanel>
         ))}
