@@ -5,9 +5,9 @@ import { createPortal } from 'react-dom';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
 import { LoadingLine } from '@/components/LoadingLine';
+import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { formatUSDC, parseUSDC } from '@/lib/format';
-import { getChain } from '@/lib/chain';
-import { getUsdcBalance, transferUsdc, walletErrorMessage, type SendReceipt } from '@/lib/wallet';
+import { getUsdcBalance, transferUsdc, walletErrorMessage, type TxReceipt } from '@/lib/wallet';
 
 type Phase = 'idle' | 'confirm' | 'sending' | 'done' | 'error';
 
@@ -52,7 +52,7 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [receipt, setReceipt] = useState<SendReceipt | null>(null);
+  const [receipt, setReceipt] = useState<TxReceipt | null>(null);
 
   const refetchBalance = useCallback(() => {
     getUsdcBalance(address)
@@ -153,50 +153,18 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
             </button>
           </div>
 
-          {/* ── the receipt — every fact of what just left, from the
-              chain itself, not from what the form believed ── */}
+          {/* ── the receipt — the shared document every money move ends in ── */}
           {phase === 'done' && receipt && (
             <div className="mt-6">
-              <div className="mb-3 flex items-baseline justify-between">
-                <p className="text-[10px] uppercase tracking-[0.28em] text-ink/90">Receipt — sent ✓</p>
-                <p className="numeric text-[10px] text-ink-faint">{getChain().name}</p>
-              </div>
-              <div className="rounded-xl border border-ink/25 bg-canvas/60">
-                <dl>
-                  {[
-                    { label: 'Amount', value: `${formatUSDC(receipt.amount)} USDC`, mono: true },
-                    { label: 'From', value: address, mono: true, breakAll: true },
-                    { label: 'To', value: receipt.to, mono: true, breakAll: true },
-                    { label: 'Transaction', value: receipt.hash, mono: true, breakAll: true },
-                    { label: 'Block', value: `#${receipt.blockNumber.toString()}`, mono: true },
-                    { label: 'When', value: receipt.timestamp.toLocaleString(), mono: true },
-                  ].map((row, i, arr) => (
-                    <div
-                      key={row.label}
-                      className={`px-4 py-2.5 ${i < arr.length - 1 ? 'border-b border-line' : ''}`}
-                    >
-                      <dt className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">{row.label}</dt>
-                      <dd
-                        className={`mt-0.5 text-[11px] leading-relaxed text-ink ${row.mono ? 'numeric' : ''} ${
-                          row.breakAll ? 'break-all' : ''
-                        }`}
-                      >
-                        {row.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-              {getChain().blockExplorers?.default && (
-                <a
-                  href={`${getChain().blockExplorers!.default.url}/tx/${receipt.hash}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 block text-center text-[11px] tracking-[0.08em] text-ink-muted transition hover:text-ink"
-                >
-                  View on {getChain().blockExplorers!.default.name} →
-                </a>
-              )}
+              <TxReceiptCard
+                title="sent"
+                receipt={receipt}
+                rows={[
+                  { label: 'Amount', value: `${formatUSDC(receipt.amount)} USDC` },
+                  { label: 'From', value: address, breakAll: true },
+                  { label: 'To', value: receipt.to, breakAll: true },
+                ]}
+              />
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={resetForAnotherSend}

@@ -111,7 +111,7 @@ export async function approveAndDeposit(
   address: string,
   amount: bigint,
   onStep?: (step: 'approve' | 'deposit') => void,
-): Promise<void> {
+): Promise<TxReceipt> {
   const walletClient = requireWalletClient();
   const usdc = getUsdcAddress();
   const vault = getVaultAddress();
@@ -135,22 +135,25 @@ export async function approveAndDeposit(
   }
 
   onStep?.('deposit');
-  await writeContractSafely(walletClient, account, {
+  // the receipt is for the deposit — the tx where money actually moves
+  const receipt = await writeContractSafely(walletClient, account, {
     address: vault,
     abi: vaultAbi,
     functionName: 'deposit',
     args: [usdc, amount],
   });
+  return buildTxReceipt(receipt, vault, amount);
 }
 
-export async function withdraw(address: string, amount: bigint): Promise<void> {
+export async function withdraw(address: string, amount: bigint): Promise<TxReceipt> {
   const walletClient = requireWalletClient();
-  await writeContractSafely(walletClient, address as `0x${string}`, {
+  const receipt = await writeContractSafely(walletClient, address as `0x${string}`, {
     address: getVaultAddress(),
     abi: vaultAbi,
     functionName: 'withdraw',
     args: [getUsdcAddress(), amount],
   });
+  return buildTxReceipt(receipt, address, amount);
 }
 
 // Plain-English translations for the custom errors defined in
@@ -248,15 +251,33 @@ export async function getUsdcBalance(address: string): Promise<bigint> {
 // "send to whatever the user typed" is fundamentally incompatible with
 // an allowlist. Send always requires a fresh, full owner signature — in
 // dev mode and Kernel mode alike. Not a UX preference; do not revisit.
-export type SendReceipt = {
+// Every money-moving call returns one of these — the receipt page's
+// facts, read back from the mined transaction and its block, never from
+// what a form believed.
+export type TxReceipt = {
   hash: string;
-  to: string; // checksummed destination, as actually sent
+  to: string; // checksummed counterparty, as actually used on-chain
   amount: bigint;
   blockNumber: bigint;
   timestamp: Date;
 };
 
-export async function transferUsdc(from: string, to: string, amount: bigint): Promise<SendReceipt> {
+async function buildTxReceipt(
+  receipt: { transactionHash: `0x${string}`; blockNumber: bigint },
+  to: string,
+  amount: bigint,
+): Promise<TxReceipt> {
+  const block = await getPublicClient().getBlock({ blockNumber: receipt.blockNumber });
+  return {
+    hash: receipt.transactionHash,
+    to,
+    amount,
+    blockNumber: receipt.blockNumber,
+    timestamp: new Date(Number(block.timestamp) * 1000),
+  };
+}
+
+export async function transferUsdc(from: string, to: string, amount: bigint): Promise<TxReceipt> {
   if (!isAddress(to)) {
     throw new Error("That doesn't look like a valid address — check it and try again.");
   }
@@ -274,14 +295,5 @@ export async function transferUsdc(from: string, to: string, amount: bigint): Pr
     functionName: 'transfer',
     args: [destination, amount],
   });
-  // the receipt page's facts come from the chain, not from what the form
-  // believed — block timestamp included
-  const block = await getPublicClient().getBlock({ blockNumber: receipt.blockNumber });
-  return {
-    hash: receipt.transactionHash,
-    to: destination,
-    amount,
-    blockNumber: receipt.blockNumber,
-    timestamp: new Date(Number(block.timestamp) * 1000),
-  };
+  return buildTxReceipt(receipt, destination, amount);
 }
