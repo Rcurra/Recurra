@@ -101,13 +101,13 @@ export function OrbitalVault({
               covers everything for {runway}
             </p>
           ) : (
-            <p className="mt-3 text-xs tracking-[0.06em] text-ink-muted">
+            <p className="mt-3 text-xs tracking-[0.06em] text-ink/90">
               {shown.length === 0
                 ? 'fund it once — everything recurring pays itself from here'
                 : ' '}
             </p>
           )}
-          <p className="mt-1.5 text-[9.5px] uppercase tracking-[0.2em] text-ink-faint">
+          <p className="mt-1.5 text-[10px] uppercase tracking-[0.2em] text-ink-muted">
             withdraw anytime — it never stops being yours
           </p>
 

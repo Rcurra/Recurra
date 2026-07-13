@@ -107,7 +107,11 @@ export function LoginScreen() {
               <RecurraMark size={64} spin />
             </div>
             <div style={{ animation: 'fadeUp 0.7s ease both 0.18s' }}>
-              <p className="mb-2 text-[10px] uppercase tracking-[0.28em] text-ink-faint">
+              {/* the grand welcome — first words anyone reads in the app */}
+              <p
+                className="mb-2.5 text-[11.5px] uppercase tracking-[0.34em] text-ink/90"
+                style={{ textShadow: '0 0 20px rgba(255,255,255,0.25)' }}
+              >
                 Welcome to Recurra
               </p>
               <h1
@@ -207,8 +211,9 @@ export function LoginScreen() {
           </div>
         </GlassPanel>
 
+        {/* the credit line earns its billing — we're proud of the stack */}
         <p
-          className="mt-6 text-center text-[10px] font-light uppercase tracking-[0.2em] text-ink-faint"
+          className="mt-6 text-center text-[11px] uppercase tracking-[0.22em] text-ink/80"
           style={{ animation: 'fadeUp 0.7s ease both 0.5s' }}
         >
           Powered by Magic · secured by your inbox

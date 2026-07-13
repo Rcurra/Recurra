@@ -17,10 +17,12 @@
   --glass-blur: 20px;
   --glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 
-  /* text — white, stepped down by opacity only */
+  /* text — white, stepped down by opacity only. Raised 2026-07-13 after
+     a live readability review ("reading the text is stressful"): muted
+     0.6 -> 0.72, faint 0.38 -> 0.5. Hierarchy survives, eyes don't. */
   --ink: #ffffff;
-  --ink-muted: rgba(255, 255, 255, 0.6);
-  --ink-faint: rgba(255, 255, 255, 0.38);
+  --ink-muted: rgba(255, 255, 255, 0.72);
+  --ink-faint: rgba(255, 255, 255, 0.5);
 
   /* legacy slot names, remapped to monochrome so every existing
      component lands on the new palette without a per-file sweep.

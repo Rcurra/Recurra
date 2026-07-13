@@ -8,8 +8,8 @@ export const T = {
   border: 'rgba(255,255,255,0.08)',
   borderBright: 'rgba(255,255,255,0.16)',
   text: '#FFFFFF',
-  dim: 'rgba(255,255,255,0.6)',
-  faint: 'rgba(255,255,255,0.38)',
+  dim: 'rgba(255,255,255,0.72)',
+  faint: 'rgba(255,255,255,0.5)',
   // legacy accent slots — white now; kept so section code reads unchanged
   mint: '#FFFFFF',
   violet: '#FFFFFF',

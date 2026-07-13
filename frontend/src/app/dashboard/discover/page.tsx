@@ -62,15 +62,15 @@ export default function DiscoverPage() {
         >
           Discover
         </h1>
-        <p className="mt-1.5 text-[11px] font-light tracking-[0.06em] text-ink-muted">
+        <p className="mt-1.5 text-xs tracking-[0.06em] text-ink/85">
           subscribe once — payments run themselves, and the money stays yours
         </p>
         {/* the login card's trust bullets, promoted to the storefront —
-            the same promises, kept in view where the deciding happens */}
+            the selling point, bright enough to sell */}
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {['Cancel anytime', 'Withdraw anytime', 'Fees covered'].map((line) => (
-            <span key={line} className="flex items-center gap-1.5 text-[10.5px] font-light text-ink-faint">
-              <span className="h-1 w-1 rounded-full bg-ink/70" />
+            <span key={line} className="flex items-center gap-1.5 text-[11px] text-ink/85">
+              <span className="h-1 w-1 rounded-full bg-ink" />
               {line}
             </span>
           ))}

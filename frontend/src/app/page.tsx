@@ -344,14 +344,17 @@ export default function LandingPage() {
             }}
           />
 
+          {/* the selling point — bright enough to sell. Raised after a
+              live readability review; these two lines ARE the pitch. */}
           <p
             style={{
-              fontSize: 12.5,
+              fontSize: 14,
               fontWeight: 400,
-              color: T.dim,
+              color: T.text,
               letterSpacing: '0.3em',
               margin: 0,
               textTransform: 'uppercase',
+              textShadow: '0 0 24px rgba(255,255,255,0.25)',
               animation: 'fadeUp 1s ease both 0.4s',
             }}
           >
@@ -359,9 +362,9 @@ export default function LandingPage() {
           </p>
           <p
             style={{
-              fontSize: 11,
-              fontWeight: 300,
-              color: T.faint,
+              fontSize: 12,
+              fontWeight: 400,
+              color: 'rgba(255,255,255,0.85)',
               letterSpacing: '0.24em',
               margin: '12px 0 0',
               textTransform: 'uppercase',
@@ -373,6 +376,20 @@ export default function LandingPage() {
 
           <button
             onClick={launch}
+            onMouseEnter={(e) => {
+              const el = e.currentTarget;
+              el.style.background = '#FFFFFF';
+              el.style.color = '#000000';
+              el.style.borderColor = '#FFFFFF';
+              el.style.boxShadow = '0 6px 32px -6px rgba(255,255,255,0.45)';
+            }}
+            onMouseLeave={(e) => {
+              const el = e.currentTarget;
+              el.style.background = T.cardGlass;
+              el.style.color = T.text;
+              el.style.borderColor = 'rgba(255,255,255,0.4)';
+              el.style.boxShadow = 'none';
+            }}
             style={{
               marginTop: 34,
               padding: '13px 42px',
@@ -388,6 +405,7 @@ export default function LandingPage() {
               cursor: 'pointer',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
+              transition: 'background 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease',
               animation: 'fadeUp 1s ease both 0.6s',
             }}
           >
@@ -414,10 +432,10 @@ export default function LandingPage() {
               flexDirection: 'column',
               alignItems: 'center',
               gap: 8,
-              fontSize: 10,
-              fontWeight: 300,
+              fontSize: 10.5,
+              fontWeight: 400,
               letterSpacing: '0.28em',
-              color: T.faint,
+              color: T.dim,
               animation: 'fadeUp 1s ease both 0.9s',
             }}
           >
