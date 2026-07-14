@@ -22,6 +22,23 @@ export function getUsdcAddress(): `0x${string}` {
   return requireAddress('NEXT_PUBLIC_USDC_ADDRESS', process.env.NEXT_PUBLIC_USDC_ADDRESS);
 }
 
+// lib/receipts.ts's stopgap event scan only — not a write target, so it's
+// the one address in this file allowed to be unset without throwing (older
+// deploys/envs predate this var; the receipts panel just shows nothing).
+export function getExecutorAddress(): `0x${string}` | null {
+  const value = process.env.NEXT_PUBLIC_EXECUTOR_ADDRESS;
+  return value ? (value as `0x${string}`) : null;
+}
+
+// Where to start the PaymentExecuted scan — the contract's own deploy
+// block (deployments.md), so the scan never has to walk pre-deploy history.
+// Defaults to 0 for anvil/local chains, where "walk the whole chain" is
+// trivially cheap anyway.
+export function getExecutorDeployBlock(): bigint {
+  const value = process.env.NEXT_PUBLIC_EXECUTOR_DEPLOY_BLOCK;
+  return value ? BigInt(value) : 0n;
+}
+
 // Standard OpenZeppelin IERC20Errors — MockUSDC inherits OZ's ERC20, so a
 // transferFrom short on balance/allowance reverts with one of these, not a
 // registry/vault error. Needed on BOTH usdcAbi (direct approve/mint calls)

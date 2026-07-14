@@ -5,24 +5,25 @@ import { createPortal } from 'react-dom';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
 import { MerchantMark } from '@/components/MerchantMark';
+import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { useAuth } from '@/features/auth';
 import type { Plan } from '@/types';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
-import { approveAndDeposit, subscribe, walletErrorMessage } from '@/lib/wallet';
+import { walletErrorMessage, type TxReceipt } from '@/lib/wallet';
+import { subscribeAndFund } from '@/lib/zerodev';
 
 const MONTH_SECS = 2_592_000;
 const RUNWAY_OPTIONS = [3, 6, 12] as const;
 
-type Phase = 'idle' | 'subscribe' | 'approve' | 'deposit' | 'done' | 'error';
+type Phase = 'idle' | 'signing' | 'done' | 'error';
 
 // One plan, open — a single centered column in the login card's anatomy
 // (the calmest card in the app, so the money moment borrows its manners):
 // the merchant's planet with its pulse rings, the amount as the headline,
 // the terms as a plain list, the runway choice, one sentence of truth,
-// one button. F3 is dev-mode direct writes, so "one signature" is still
-// 2-3 real ones here (subscribe, approve, deposit) — F4's ZeroDev
-// batching is what actually collapses them. The step counter is that
-// stub, honestly.
+// one button. F4: subscribe + approve + deposit batch into one
+// gas-sponsored UserOperation via ZeroDev's Kernel account — genuinely
+// one signature now, not a step counter standing in for three.
 export function PlanDetailModal({
   plan,
   onClose,
@@ -65,30 +66,27 @@ function PlanDetailContent({
   const [months, setMonths] = useState<(typeof RUNWAY_OPTIONS)[number]>(3);
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
-  // Tracked so a retry after a funding failure doesn't call subscribe()
-  // again — that would revert AlreadySubscribed since it already went
-  // through.
   const [subId, setSubId] = useState<number | null>(null);
+  const [receipt, setReceipt] = useState<TxReceipt | null>(null);
 
   const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
   const isMonthly = plan.intervalSecs === MONTH_SECS;
   const fundAmount = monthly * BigInt(months);
-  const signing = phase === 'subscribe' || phase === 'approve' || phase === 'deposit';
+  const signing = phase === 'signing';
 
   async function handleSubscribe() {
     if (!address) return;
     setError(null);
+    setPhase('signing');
     try {
-      let currentSubId = subId;
-      if (currentSubId === null) {
-        setPhase('subscribe');
-        currentSubId = await subscribe(address, plan.id);
-        setSubId(currentSubId);
-      }
-      await approveAndDeposit(address, fundAmount, setPhase);
+      // One batched UserOp: subscribe + approve + deposit, atomically — no
+      // partial-failure state to track (unlike the old sequential-tx path,
+      // this either all lands or none of it does).
+      const result = await subscribeAndFund(address, plan.id, fundAmount, plan.intervalSecs);
+      setSubId(result.subId);
+      setReceipt(result.receipt);
       setPhase('done');
       onSubscribed?.();
-      setTimeout(onClose, 1100);
     } catch (e) {
       setError(walletErrorMessage(e));
       setPhase('error');
@@ -163,84 +161,86 @@ function PlanDetailContent({
             ))}
           </dl>
 
-          {/* ── the runway — how much goes in, said plainly ── */}
-          <div className="mt-5">
-            <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
-              Fund your vault for
-            </p>
-            <div className="flex gap-2">
-              {RUNWAY_OPTIONS.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMonths(m)}
-                  disabled={signing || phase === 'done'}
-                  className={`flex-1 rounded-full border px-3 py-2 text-xs tracking-[0.04em] transition disabled:opacity-50 ${
-                    months === m
-                      ? 'border-ink bg-ink font-semibold text-canvas'
-                      : 'border-line text-ink-muted hover:border-ink/40 hover:text-ink'
-                  }`}
-                >
-                  {m} months
-                </button>
-              ))}
+          {phase === 'done' && receipt ? (
+            /* ── the receipt — same document every money move in the app ends in ── */
+            <div className="mt-5">
+              <TxReceiptCard
+                title="subscribed"
+                receipt={receipt}
+                rows={[
+                  { label: 'Subscription', value: subId !== null ? `#${subId}` : '—' },
+                  { label: 'Funded', value: `${formatUSDC(receipt.amount)} USDC` },
+                  { label: 'To the vault', value: receipt.to, breakAll: true },
+                ]}
+              />
+              <button
+                onClick={onClose}
+                className="mt-4 w-full rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)]"
+              >
+                Done
+              </button>
             </div>
+          ) : (
+            <>
+              {/* ── the runway — how much goes in, said plainly ── */}
+              <div className="mt-5">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+                  Fund your vault for
+                </p>
+                <div className="flex gap-2">
+                  {RUNWAY_OPTIONS.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMonths(m)}
+                      disabled={signing}
+                      className={`flex-1 rounded-full border px-3 py-2 text-xs tracking-[0.04em] transition disabled:opacity-50 ${
+                        months === m
+                          ? 'border-ink bg-ink font-semibold text-canvas'
+                          : 'border-line text-ink-muted hover:border-ink/40 hover:text-ink'
+                      }`}
+                    >
+                      {m} months
+                    </button>
+                  ))}
+                </div>
 
-            <p className="mt-3 text-[11px] font-light leading-relaxed text-ink-muted">
-              <span className="numeric text-ink">{formatUSDC(fundAmount)} USDC</span>{' '}
-              goes into your vault — your first charge fires today, then you&apos;re covered for the
-              next <span className="numeric text-ink">{months} months</span> without adding more. It
-              stays yours — withdraw anytime. Recurra can only ever move{' '}
-              <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span> every{' '}
-              {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
-            </p>
-          </div>
+                <p className="mt-3 text-[11px] font-light leading-relaxed text-ink-muted">
+                  Your vault will hold{' '}
+                  <span className="numeric text-ink">{formatUSDC(fundAmount)} USDC</span>{' '}
+                  — only topped up from your wallet if it doesn&apos;t already. Your first charge
+                  fires today, then you&apos;re covered for the next{' '}
+                  <span className="numeric text-ink">{months} months</span> without adding more. It
+                  stays yours — withdraw anytime. Recurra can only ever move{' '}
+                  <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span> every{' '}
+                  {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
+                </p>
+              </div>
 
-          {/* ── the one action ── */}
-          <div className="mt-5 flex flex-col gap-2">
-            <button
-              onClick={handleSubscribe}
-              disabled={signing || phase === 'done' || !address}
-              className="w-full rounded-full bg-ink px-5 py-2.5 text-sm font-semibold tracking-[0.04em] text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)] disabled:opacity-40 disabled:hover:shadow-none"
-            >
-              {phase === 'done'
-                ? 'Signed ✓'
-                : phase === 'error'
-                  ? 'Try again'
-                  : phase === 'idle'
-                    ? 'Subscribe'
-                    : 'Signing…'}
-            </button>
+              {/* ── the one action ── */}
+              <div className="mt-5 flex flex-col gap-2">
+                <button
+                  onClick={handleSubscribe}
+                  disabled={signing || !address}
+                  className="w-full rounded-full bg-ink px-5 py-2.5 text-sm font-semibold tracking-[0.04em] text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)] disabled:opacity-40 disabled:hover:shadow-none"
+                >
+                  {phase === 'error' ? 'Try again' : signing ? 'Signing…' : 'Subscribe'}
+                </button>
 
-            {signing && (
-              <p className="numeric text-center text-[11px] text-ink-faint">
-                {phase === 'subscribe' && 'Step 1 of 3 — setting up your schedule'}
-                {phase === 'approve' && 'Step 2 of 3 — approving your vault'}
-                {phase === 'deposit' && 'Step 3 of 3 — funding your vault'}
-              </p>
-            )}
-            {phase === 'done' && (
-              <p className="numeric text-center text-[11px] text-ink-muted">
-                {formatUSDC(fundAmount)} USDC is in your vault.
-              </p>
-            )}
-            {error && (
-              <>
-                {subId !== null && (
-                  <p className="text-center text-[11px] text-ink-faint">
-                    Your schedule is already set up — only funding failed. Retrying will not create
-                    a second subscription.
+                {signing && (
+                  <p className="numeric text-center text-[11px] text-ink-faint">
+                    Signing — setting up your schedule and funding your vault, in one signature
                   </p>
                 )}
-                <InlineError message={error} />
-              </>
-            )}
-            {phase === 'idle' && !error && (
-              <p className="text-center text-[11px] font-light leading-relaxed text-ink-faint">
-                Subscribing sets up your schedule and deposits the amount above — both in this one
-                click. Cancel anytime · 3 signatures for now, 1 once account abstraction lands.
-              </p>
-            )}
-          </div>
+                {error && <InlineError message={error} />}
+                {phase === 'idle' && !error && (
+                  <p className="text-center text-[11px] font-light leading-relaxed text-ink-faint">
+                    Subscribing sets up your schedule and deposits the amount above — both in this
+                    one click, one signature. Cancel anytime.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </GlassPanel>
       </div>
     </div>,

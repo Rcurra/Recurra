@@ -4,10 +4,19 @@ import { useEffect, useState } from 'react';
 import { GlassCard } from '@/components/GlassCard';
 import { CadenceRing } from '@/components/CadenceRing';
 import { InlineError } from '@/components/InlineError';
+import { LoadingLine } from '@/components/LoadingLine';
+import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { useAuth } from '@/features/auth';
 import type { Plan, Subscription } from '@/types';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
+import { getSubscriptionReceipts, type SubscriptionReceipt } from '@/lib/receipts';
 import { unsubscribe, walletErrorMessage } from '@/lib/wallet';
+
+const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
+  subscribed: 'subscribed & funded',
+  charged: 'charged',
+  cancelled: 'cancelled',
+};
 
 // The live countdown — the pulse made visible. Ticks every second toward
 // nextPaymentDue; this is real chain state, not decoration.
@@ -57,7 +66,9 @@ export function SubDetailModal({
 
   if (!sub) return null;
 
-  return <SubDetailContent sub={sub} plan={plan} onClose={onClose} onCancelled={onCancelled} />;
+  // Keyed by sub id so switching subscriptions resets receipts/cancel state
+  // via remount instead of a manual reset inside an effect.
+  return <SubDetailContent key={sub.id} sub={sub} plan={plan} onClose={onClose} onCancelled={onCancelled} />;
 }
 
 // Split so the countdown hook only runs while a subscription is open.
@@ -78,6 +89,23 @@ function SubDetailContent({
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const [receipts, setReceipts] = useState<SubscriptionReceipt[] | null>(null);
+  const [receiptsError, setReceiptsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSubscriptionReceipts(sub.id)
+      .then((r) => {
+        if (!cancelled) setReceipts(r);
+      })
+      .catch((e) => {
+        if (!cancelled) setReceiptsError(walletErrorMessage(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sub.id]);
 
   async function handleCancel() {
     if (!address) return;
@@ -189,6 +217,38 @@ function SubDetailContent({
                     <p className="numeric mt-1 text-sm text-ink">{f.value}</p>
                   </div>
                 ))}
+              </div>
+
+              {/* the receipts — the whole lifetime of this subscription
+                  (subscribed & funded, every charge, cancellation), each
+                  one the same document Wallet/Vault writes end in. Stays
+                  here after cancelling — history, not a live status. */}
+              <div className="mt-5">
+                <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">Receipts</p>
+                {receipts === null && !receiptsError && <LoadingLine label="reading the chain…" />}
+                {receiptsError && <InlineError message={receiptsError} />}
+                {receipts !== null && receipts.length === 0 && (
+                  <p className="text-[11px] text-ink-faint">Nothing on-chain for this subscription yet.</p>
+                )}
+                {receipts !== null && receipts.length > 0 && (
+                  <div className="max-h-64 space-y-4 overflow-y-auto pr-1">
+                    {receipts.map(({ kind, receipt }) => (
+                      <TxReceiptCard
+                        key={receipt.hash}
+                        title={RECEIPT_TITLES[kind]}
+                        receipt={receipt}
+                        rows={
+                          kind === 'cancelled'
+                            ? []
+                            : [
+                                { label: kind === 'subscribed' ? 'Funded' : 'Amount', value: `${formatUSDC(receipt.amount)} USDC` },
+                                { label: kind === 'subscribed' ? 'To the vault' : 'Paid to', value: receipt.to, breakAll: true },
+                              ]
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* the way out — always visible, per the invariant */}

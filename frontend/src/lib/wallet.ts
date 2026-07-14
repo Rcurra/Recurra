@@ -1,20 +1,27 @@
 // F3's signer abstraction — direct viem writes against the deployed
-// contracts, dev-mode only. F4 re-points these same four calls at the
-// Kernel account behind the identical function signatures (the CONCEPT.md
-// dev-mode promise): feature code imports this file, never viem itself.
+// contracts, dev-mode only. F4 re-points subscribe+fund at the Kernel
+// account behind an identical call shape (the CONCEPT.md dev-mode
+// promise); everything else here stays feature code's one door to viem.
 //
 // Every function takes the connected address explicitly (from useAuth())
 // rather than reading it off the wallet client, because the real-Magic
-// client is built without an `account` (see lib/magic.ts). Passing the
-// address as a plain string per-call works for both paths: anvil
-// auto-signs its own unlocked dev accounts over http(), and Magic's
-// custom() transport signs via its own provider — same account-as-string
-// override either way.
+// client is built without an `account` (see lib/magic.ts). The actual
+// signing account per write is resolved via lib/magic.ts's
+// `getWriteAccount` — real-Magic mode still just needs the address (its
+// custom() transport signs via Magic's own provider), but dev-wallet mode
+// needs the real LocalAccount object, not merely its address: viem only
+// signs locally (then broadcasts via eth_sendRawTransaction) when the
+// `account` it's given carries signing capability. A bare address makes
+// viem assume a JSON-RPC account and ask the transport's node to sign via
+// eth_sendTransaction — which anvil happens to support for its own
+// well-known unlocked accounts, but no real chain does (found live
+// 2026-07-14, testing dev-wallet mode against Sepolia).
 
 import {
   BaseError,
   ContractFunctionRevertedError,
   createPublicClient,
+  decodeErrorResult,
   getAddress,
   http,
   isAddress,
@@ -26,7 +33,7 @@ import {
   type WalletClient,
 } from 'viem';
 import { getChain } from './chain';
-import { getWalletClient } from './magic';
+import { getWalletClient, getWriteAccount } from './magic';
 import {
   getRegistryAddress,
   getUsdcAddress,
@@ -38,7 +45,9 @@ import {
 
 let publicClient: PublicClient | null = null;
 
-function getPublicClient(): PublicClient {
+// Exported for lib/zerodev.ts (F4) — one shared read client per chain
+// instead of a second instance pointed at the same RPC.
+export function getPublicClient(): PublicClient {
   if (!publicClient) {
     publicClient = createPublicClient({ chain: getChain(), transport: http() });
   }
@@ -64,9 +73,12 @@ function requireWalletClient() {
 // state can still change between simulate and the tx actually landing.
 async function writeContractSafely(
   walletClient: WalletClient,
-  account: Address,
+  address: Address,
   params: { address: Address; abi: Abi; functionName: string; args: readonly unknown[] },
 ) {
+  // Resolved per call, not cached — dev-wallet mode needs the real signing
+  // account (see the header comment), not just the address callers pass in.
+  const account = getWriteAccount(address);
   const { request } = await getPublicClient().simulateContract({ ...params, account });
   const hash = await walletClient.writeContract({ ...request, chain: getChain(), account } as Parameters<
     WalletClient['writeContract']
@@ -161,7 +173,7 @@ export async function withdraw(address: string, amount: bigint): Promise<TxRecei
 // decoded error name (e.g. "NotPlanMerchant") — jargon, but a real name
 // beats a hex selector; anything genuinely unrecognized falls further back
 // to shortMessage in walletErrorMessage below.
-const FRIENDLY_REVERTS: Record<string, string> = {
+export const FRIENDLY_REVERTS: Record<string, string> = {
   AlreadySubscribed: "You're already subscribed to this plan.",
   PlanNotActive: 'This plan is no longer available.',
   SubscriptionNotActive: 'This subscription is already cancelled.',
@@ -198,6 +210,29 @@ export function walletErrorMessage(error: unknown): string {
     return NETWORK_NOISE.test(error.message) ? NETWORK_MESSAGE : error.message;
   }
   return 'Something went wrong';
+}
+
+// F4 — ZeroDev's bundler hands back a UserOp revert as raw ABI-encoded
+// error data (a bare "0x5fd8a132", not a decoded BaseError), so
+// walletErrorMessage's ContractFunctionRevertedError path never engages —
+// found live 2026-07-14: a legitimate AlreadySubscribed revert showed as
+// that literal hex string. Tries the same three ABIs' error catalogs
+// (whichever contract in the batch reverted) and reuses the same
+// FRIENDLY_REVERTS map, so a UserOp revert and a plain-tx revert read
+// identically to the user. Returns the raw data back if nothing matches —
+// never throws, so a caller can always safely embed the result in a
+// message.
+export function decodeRevertData(data: string): string {
+  if (!/^0x[0-9a-fA-F]+$/.test(data)) return data;
+  for (const abi of [registryAbi, vaultAbi, usdcAbi]) {
+    try {
+      const decoded = decodeErrorResult({ abi, data: data as `0x${string}` });
+      return FRIENDLY_REVERTS[decoded.errorName] ?? decoded.errorName;
+    } catch {
+      // not this ABI's error — try the next
+    }
+  }
+  return data;
 }
 
 // Dev-mode stand-in for F5's real vault-balance endpoint — reads the chain
@@ -262,12 +297,32 @@ export type TxReceipt = {
   timestamp: Date;
 };
 
-async function buildTxReceipt(
+// Exported for lib/zerodev.ts (F4) to reuse against a UserOperation's inner
+// transaction receipt — same shape, same "read the facts back from the
+// chain" discipline, no reason to reimplement the block-timestamp lookup.
+//
+// Retries getBlock a few times: found live 2026-07-14 on Sepolia — the
+// write itself (and its receipt) can be fully confirmed while the specific
+// RPC node this client lands on hasn't quite caught up to that block yet
+// ("block could not be found"), a normal brief propagation lag, not a real
+// failure. Without the retry, a genuinely successful subscribe/deposit/
+// withdraw/send reported as an error purely because of this cosmetic
+// last step — the money moved either way, but the UI lied about it.
+export async function buildTxReceipt(
   receipt: { transactionHash: `0x${string}`; blockNumber: bigint },
   to: string,
   amount: bigint,
 ): Promise<TxReceipt> {
-  const block = await getPublicClient().getBlock({ blockNumber: receipt.blockNumber });
+  let block;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      block = await getPublicClient().getBlock({ blockNumber: receipt.blockNumber });
+      break;
+    } catch (e) {
+      if (attempt >= 4) throw e;
+      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
   return {
     hash: receipt.transactionHash,
     to,

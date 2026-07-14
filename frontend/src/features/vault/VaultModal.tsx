@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
+import { LoadingLine } from '@/components/LoadingLine';
 import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { formatUSDC, parseUSDC } from '@/lib/format';
+import { getVaultHistory, type VaultReceipt } from '@/lib/receipts';
 import {
   approveAndDeposit,
   mintTestUsdc,
@@ -13,6 +15,12 @@ import {
   withdraw,
   type TxReceipt,
 } from '@/lib/wallet';
+
+const HISTORY_TITLES: Record<VaultReceipt['kind'], string> = {
+  deposited: 'added to vault',
+  withdrawn: 'withdrawn',
+  charged: 'charged',
+};
 
 // The faucet is a dev/testnet-only escape hatch (MockUSDC.mint() is open
 // to anyone) — same flag the dev-signer path already gates on, so it can
@@ -75,6 +83,27 @@ function VaultModalContent({
   const [busy, setBusy] = useState<'deposit' | 'withdraw' | 'mint' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
+
+  const [history, setHistory] = useState<VaultReceipt[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    getVaultHistory(address)
+      .then((h) => {
+        if (!cancelled) setHistory(h);
+      })
+      .catch((e) => {
+        if (!cancelled) setHistoryError(walletErrorMessage(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `done` is a deliberate re-trigger, not read in the body — re-reads
+    // history after every completed action so a fresh deposit/withdraw
+    // shows up without waiting on a poll.
+  }, [address, done]);
 
   const amountUnits = parseUSDC(amount);
   const amountInvalid = amount.length > 0 && amountUnits === null;
@@ -275,6 +304,36 @@ function VaultModalContent({
               )}
             </div>
           )}
+
+          {/* ── history — every completed vault move, always here, even
+              after a subscription that funded it gets cancelled ── */}
+          <div className="mt-6 border-t border-line pt-5">
+            <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">History</p>
+            {history === null && !historyError && <LoadingLine label="reading the chain…" />}
+            {historyError && <InlineError message={historyError} />}
+            {history !== null && history.length === 0 && (
+              <p className="text-[11px] text-ink-faint">Nothing moved yet.</p>
+            )}
+            {history !== null && history.length > 0 && (
+              <div className="max-h-64 space-y-4 overflow-y-auto pr-1">
+                {history.map(({ kind, receipt }) => (
+                  <TxReceiptCard
+                    key={receipt.hash}
+                    title={HISTORY_TITLES[kind]}
+                    receipt={receipt}
+                    rows={[
+                      { label: 'Amount', value: `${formatUSDC(receipt.amount)} USDC` },
+                      {
+                        label: kind === 'deposited' ? 'To the vault' : kind === 'withdrawn' ? 'To your wallet' : 'Paid to',
+                        value: receipt.to,
+                        breakAll: true,
+                      },
+                    ]}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </GlassPanel>
       </div>
     </div>,
