@@ -43,7 +43,9 @@ impl TxSender {
     pub async fn send(&self, to: Address, calldata: Bytes) -> Result<String, AppError> {
         match self {
             TxSender::Local(provider) => {
-                let tx = TransactionRequest::default().with_to(to).with_input(calldata);
+                let tx = TransactionRequest::default()
+                    .with_to(to)
+                    .with_input(calldata);
                 let pending = provider
                     .send_transaction(tx)
                     .await
