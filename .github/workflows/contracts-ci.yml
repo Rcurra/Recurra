@@ -32,7 +32,10 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
 
       - name: Format check
-        run: forge fmt --check
+        # Scoped explicitly — a bare `forge fmt` walks lib/ too and would
+        # reformat (or, in --check, potentially misjudge) the vendored
+        # openzeppelin-contracts submodule. See plan.md's design rules.
+        run: forge fmt --check src test script
 
       - name: Build
         run: forge build
