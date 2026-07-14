@@ -8,9 +8,9 @@ import {ExecutorWired} from "./ExecutorWired.sol";
 contract SubscriptionRegistry is ExecutorWired {
     struct Plan {
         address merchant;
-        address token;      // ERC-20 token accepted for payment
-        uint256 amount;     // amount per interval, in token's smallest unit
-        uint256 interval;   // seconds between payments
+        address token; // ERC-20 token accepted for payment
+        uint256 amount; // amount per interval, in token's smallest unit
+        uint256 interval; // seconds between payments
         bool active;
     }
 

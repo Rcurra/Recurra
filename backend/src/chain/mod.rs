@@ -247,7 +247,9 @@ impl AppState {
             if p.merchant == Address::ZERO {
                 continue;
             }
-            plans.push(map_plan(id, p.merchant, p.token, p.amount, p.interval, p.active));
+            plans.push(map_plan(
+                id, p.merchant, p.token, p.amount, p.interval, p.active,
+            ));
         }
         Ok(plans)
     }
@@ -286,7 +288,14 @@ fn map_subscription(
 /// - `amount` is a token-smallest-unit `uint256` → decimal string, so no
 ///   precision is lost squeezing it through a JSON number
 /// - `interval` is seconds → `u64`
-fn map_plan(id: u64, merchant: Address, token: Address, amount: U256, interval: U256, active: bool) -> Plan {
+fn map_plan(
+    id: u64,
+    merchant: Address,
+    token: Address,
+    amount: U256,
+    interval: U256,
+    active: bool,
+) -> Plan {
     Plan {
         id,
         merchant: merchant.to_checksum(None),
