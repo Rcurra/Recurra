@@ -1,7 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { SubDetailModal, useSubscriptions } from '@/features/subscriptions';
 import type { Subscription } from '@/types';
 import { useAuth } from '@/features/auth';
@@ -10,32 +9,18 @@ import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
 import { LoadingLine } from '@/components/LoadingLine';
-import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeAgo, timeUntil } from '@/lib/format';
-import { MOCK_RECEIPTS } from '@/lib/mockData';
+import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeUntil } from '@/lib/format';
 
 type Filter = 'active' | 'cancelled';
 
-// useSearchParams needs a Suspense boundary above it (Next requirement);
-// the page is the boundary, the view is the content.
 export default function SubscriptionsPage() {
-  return (
-    <Suspense fallback={null}>
-      <SubscriptionsView />
-    </Suspense>
-  );
+  return <SubscriptionsView />;
 }
 
 function SubscriptionsView() {
   const { address } = useAuth();
-  const searchParams = useSearchParams();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
   const [filter, setFilter] = useState<Filter>('active');
-  // Activity is not a third state — it's a takeover panel, toggled from
-  // the opposite corner. The old /dashboard/activity route deep-links it
-  // open via ?tab=activity (read from the router's params, not
-  // window.location — a client-side redirect can mount this component
-  // before the window URL updates).
-  const [activityOpen, setActivityOpen] = useState(searchParams.get('tab') === 'activity');
   const [selected, setSelected] = useState<Subscription | null>(null);
 
   const { subscriptions, loading, error, refetch } = useSubscriptions(address);
@@ -127,7 +112,9 @@ function SubscriptionsView() {
         </div>
       )}
 
-      {/* header row: state filters left, activity apart on the right */}
+      {/* header row: state filters — Activity's fake preview retired now
+          that receipts are real, per-subscription (open any card for its
+          own receipt list, backed by an on-chain PaymentExecuted scan) */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3" style={{ animation: 'fadeUp 0.7s ease both' }}>
         <div className="flex items-center gap-2">
           {(
@@ -140,7 +127,7 @@ function SubscriptionsView() {
               key={t.key}
               onClick={() => setFilter(t.key)}
               className={`numeric rounded-full px-4 py-2 text-xs tracking-[0.04em] transition ${
-                filter === t.key && !activityOpen
+                filter === t.key
                   ? 'border border-mint/40 bg-mint-deep text-mint'
                   : 'border border-line text-ink-muted hover:text-ink'
               }`}
@@ -149,69 +136,10 @@ function SubscriptionsView() {
             </button>
           ))}
         </div>
-
-        <button
-          onClick={() => setActivityOpen((o) => !o)}
-          className={`numeric flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.04em] transition ${
-            activityOpen
-              ? 'border border-violet/50 bg-violet/15 text-violet-light'
-              : 'border border-line text-ink-muted hover:text-ink'
-          }`}
-          aria-expanded={activityOpen}
-        >
-          Activity
-          <svg
-            width="9"
-            height="6"
-            viewBox="0 0 9 6"
-            className={`transition-transform duration-300 ${activityOpen ? 'rotate-180' : ''}`}
-          >
-            <path d="M1 1 L4.5 4.5 L8 1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
-        </button>
       </div>
 
-      {/* ── activity takeover ─────────────────────────────────── */}
-      {activityOpen && (
-        <div style={{ animation: 'fadeUp 0.45s ease both' }}>
-          <div className="mb-4 flex items-center gap-2">
-            <span className="numeric rounded-full border border-line px-2 py-0.5 text-[9px] tracking-[0.14em] text-ink-faint">
-              PREVIEW
-            </span>
-            <p className="text-xs text-ink-faint">sample receipts — real history arrives with F5</p>
-          </div>
-          <ul className="space-y-3">
-            {MOCK_RECEIPTS.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-5 rounded-2xl border border-line bg-surface/75 p-5 backdrop-blur-xl"
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-mint" style={{ boxShadow: '0 0 8px var(--mint)' }} />
-                <div className="min-w-0 flex-1">
-                  <p className="numeric text-[15px] font-medium text-ink">{formatUSDC(r.amount)} USDC</p>
-                  <p className="mt-1 text-xs text-ink-muted">
-                    paid to <span className="numeric">{shortAddress(r.merchant)}</span>
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="numeric text-xs text-ink-muted">{timeAgo(r.paidAt)}</p>
-                  <p
-                    title="Arrives with F5 — real receipts link to Arbiscan"
-                    className="numeric mt-1 cursor-not-allowed text-[11px] text-ink-faint opacity-60"
-                  >
-                    {r.txHash}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* ── the cadences — each subscription wears its ring ───── */}
-      {!activityOpen && (
-        <>
-          {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
           {loading && !error && <LoadingLine label="loading subscriptions…" />}
 
@@ -289,8 +217,6 @@ function SubscriptionsView() {
               );
             })}
           </div>
-        </>
-      )}
 
       <SubDetailModal
         sub={selected}
