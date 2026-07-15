@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { GlassCard } from '@/components/GlassCard';
-import { CadenceRing } from '@/components/CadenceRing';
+import { createPortal } from 'react-dom';
+import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
 import { LoadingLine } from '@/components/LoadingLine';
-import { TxReceiptCard } from '@/components/TxReceiptCard';
+import { ReceiptListRow } from '@/components/ReceiptListRow';
 import { useAuth } from '@/features/auth';
 import type { Plan, Subscription } from '@/types';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
@@ -13,13 +13,13 @@ import { getSubscriptionReceipts, type SubscriptionReceipt } from '@/lib/receipt
 import { unsubscribe, walletErrorMessage } from '@/lib/wallet';
 
 const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
-  subscribed: 'subscribed & funded',
+  subscribed: 'subscribed',
   charged: 'charged',
   cancelled: 'cancelled',
 };
 
-// The live countdown — the pulse made visible. Ticks every second toward
-// nextPaymentDue; this is real chain state, not decoration.
+// The live countdown — real chain state, not decoration. Ticks every
+// second toward nextPaymentDue.
 function useCountdown(target: Date) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -38,8 +38,14 @@ function useCountdown(target: Date) {
   return { due: false, text: days > 0 ? `${days}d ${hh}:${mm}:${ss}` : `${hh}:${mm}:${ss}` };
 }
 
-// One subscription, open — its ring center-stage with the atmosphere
-// shells, the countdown ticking underneath, the cycle drawn as a line.
+// One subscription, open — rebuilt 2026-07-15 to match Wallet/Vault's
+// anatomy exactly (single calm column: label, big number, plain subtext,
+// hairline-row facts, receipts, one action) instead of the old two-column
+// [ring | paperwork] split, which read as scattered next to those two.
+// The atmosphere-shell "pulse" rings and the ring/countdown breathing are
+// gone too — restraint over decoration, same rule CadenceRing itself is
+// built on ("nothing decorative the architecture can't honor"); a static
+// fill and a plain countdown already say everything true here.
 export function SubDetailModal({
   sub,
   plan,
@@ -92,6 +98,13 @@ function SubDetailContent({
 
   const [receipts, setReceipts] = useState<SubscriptionReceipt[] | null>(null);
   const [receiptsError, setReceiptsError] = useState<string | null>(null);
+  // Fetched quietly in the background either way (cheap, and the count
+  // needs to be ready the moment the toggle appears) — but only RENDERED
+  // once the user actually asks to see it. Found live 2026-07-15: showing
+  // the full receipt cards unconditionally pushed Cancel off-screen and
+  // read as clutter, not information — this should be something you go
+  // looking for, not something that just shows up.
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,175 +136,174 @@ function SubDetailContent({
     }
   }
 
-  return (
+  const facts = [
+    { label: 'Merchant', value: plan ? shortAddress(plan.merchant) : '—' },
+    { label: 'Plan', value: `#${sub.planId}` },
+    { label: 'Max exposure', value: plan ? `${formatUSDC(plan.amount)} USDC / cycle` : '—' },
+    { label: 'Status', value: sub.active ? 'Active' : 'Cancelled' },
+  ];
+
+  // Portaled to <body>, fixed backdrop — this was the last modal in the
+  // app still missing both fixes (z-50 inside the page's z-10 context
+  // loses to the sticky z-20 header; an absolute backdrop scrolls away
+  // inside a scrollable wrapper and exposes the page beneath).
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Subscription details"
     >
-      {/* backdrop — click to close */}
-      <div className="absolute inset-0 bg-canvas/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-canvas/70 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative w-full max-w-2xl" style={{ animation: 'fadeUp 0.35s ease both' }}>
-        <GlassCard hairline className="max-h-[85vh] overflow-y-auto p-8">
-          {/* close */}
+      <div className="relative my-auto w-full max-w-sm" style={{ animation: 'fadeUp 0.35s ease both' }}>
+        <GlassPanel hairline className="p-6">
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute right-4 top-4 z-10 rounded-full border border-line px-2.5 py-1 text-sm text-ink-muted transition hover:border-danger/40 hover:text-danger"
+            className="absolute right-4 top-4 z-10 rounded-full border border-line px-2.5 py-1 text-sm text-ink-muted transition hover:border-ink/50 hover:text-ink"
           >
             ×
           </button>
 
-          {/* landscape: the stage on the left, the paperwork on the right */}
-          <div className="grid grid-cols-1 items-center gap-8 sm:grid-cols-[auto_1fr]">
-            {/* ── the cadence, center stage ───────────────────── */}
-            <div className="flex flex-col items-center text-center sm:pr-2">
-              <div className="relative" style={{ width: 176, height: 176 }}>
-                {/* atmosphere shells — the pulse, expanding off the ring */}
-                {[0, 1].map((i) => (
-                  <div
-                    key={i}
-                    className="absolute inset-0 rounded-full border border-mint/30"
-                    style={{ animation: `shellWave ${7 + i * 3}s ease-out infinite ${i * 2.4}s` }}
-                  />
-                ))}
-                <CadenceRing progress={sub.active ? progress : 0} size={176} strokeWidth={4} breathing={sub.active} />
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <p className="numeric text-3xl font-semibold leading-none text-ink">
-                    {plan ? formatUSDC(plan.amount) : `#${sub.planId}`}
-                  </p>
-                  <p className="numeric mt-1.5 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
-                    USDC {plan && `/ ${intervalLabel(plan.intervalSecs)}`}
-                  </p>
-                </div>
-              </div>
+          <p className="text-[10px] uppercase tracking-[0.28em] text-ink-faint">
+            Subscription — {sub.active ? 'recurring' : 'cancelled'}
+          </p>
 
-              {/* the countdown — alive */}
-              <p className="numeric mt-6 text-[10px] uppercase tracking-[0.28em] text-ink-faint">Next charge</p>
-              <p
-                className={`numeric mt-2 text-2xl font-semibold tracking-wide ${
-                  countdown.due ? 'breathe text-mint' : 'text-ink'
-                }`}
-              >
-                {sub.active ? countdown.text : '—'}
-              </p>
+          {/* ── the amount ── */}
+          <p className="numeric mt-5 text-4xl font-light text-ink">
+            {plan ? formatUSDC(plan.amount) : `#${sub.planId}`}
+            <span className="pl-2 text-base text-ink-muted">
+              USDC {plan && `/ ${intervalLabel(plan.intervalSecs)}`}
+            </span>
+          </p>
+          <p className="mt-1.5 text-[11px] font-light text-ink-muted">
+            {sub.active ? (
+              <>
+                next charge <span className="numeric text-ink">{countdown.text}</span>
+              </>
+            ) : (
+              'no more charges — history kept below'
+            )}
+          </p>
+
+          {/* the cycle, drawn as a line — the one animated element left,
+              and it only ever moves with real progress */}
+          {sub.active && (
+            <div className="mt-4">
+              <div className="relative h-px w-full bg-line">
+                <div
+                  className="absolute inset-y-0 left-0 bg-ink"
+                  style={{ width: `${progress * 100}%` }}
+                />
+                <span
+                  className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-ink"
+                  style={{ left: `calc(${progress * 100}% - 4px)` }}
+                />
+              </div>
+              <div className="mt-1.5 flex justify-between">
+                <span className="numeric text-[9px] uppercase tracking-[0.16em] text-ink-faint">charged</span>
+                <span className="numeric text-[9px] uppercase tracking-[0.16em] text-ink-faint">due</span>
+              </div>
             </div>
+          )}
 
-            {/* ── the paperwork ───────────────────────────────── */}
-            <div>
-              {/* the cycle, drawn as a line */}
-              {sub.active && (
-                <div className="mb-6">
-                  <div className="relative h-px w-full bg-line">
-                    <div
-                      className="absolute inset-y-0 left-0"
-                      style={{
-                        width: `${progress * 100}%`,
-                        background: 'linear-gradient(90deg, var(--mint), var(--violet))',
-                      }}
-                    />
-                    <span
-                      className="absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-mint"
-                      style={{ left: `calc(${progress * 100}% - 5px)`, boxShadow: '0 0 8px var(--mint)' }}
-                    />
-                  </div>
-                  <div className="mt-2 flex justify-between">
-                    <span className="numeric text-[9px] uppercase tracking-[0.16em] text-ink-faint">charged</span>
-                    <span className="numeric text-[9px] uppercase tracking-[0.16em] text-ink-faint">due</span>
-                  </div>
-                </div>
+          {/* ── the facts ── */}
+          <dl className="mt-5 border-t border-line">
+            {facts.map((f) => (
+              <div key={f.label} className="flex items-baseline justify-between gap-4 border-b border-line py-2">
+                <dt className="text-[10px] uppercase tracking-[0.16em] text-ink-faint">{f.label}</dt>
+                <dd className="numeric text-xs text-ink">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          {/* ── the receipts — the whole lifetime of this subscription
+              (subscribed & funded, every charge, cancellation), each one
+              the same document Wallet/Vault writes end in. Stays here
+              after cancelling — history, not a live status. Collapsed by
+              default: something you go looking for, not something that
+              just shows up and crowds the modal. ── */}
+          <button
+            onClick={() => setReceiptsOpen((o) => !o)}
+            className="mt-5 flex w-full items-center justify-between border-t border-line pt-4 text-left"
+            aria-expanded={receiptsOpen}
+          >
+            <span className="text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+              Receipts{receipts !== null && ` (${receipts.length})`}
+            </span>
+            <svg
+              width="9"
+              height="6"
+              viewBox="0 0 9 6"
+              className={`shrink-0 text-ink-faint transition-transform duration-300 ${receiptsOpen ? 'rotate-180' : ''}`}
+            >
+              <path d="M1 1 L4.5 4.5 L8 1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+          {receiptsOpen && (
+            <div className="mt-3">
+              {receipts === null && !receiptsError && <LoadingLine label="reading the chain…" />}
+              {receiptsError && <InlineError message={receiptsError} />}
+              {receipts !== null && receipts.length === 0 && (
+                <p className="text-[11px] text-ink-faint">Nothing on-chain for this subscription yet.</p>
               )}
-
-              {/* the facts */}
-              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
-                {[
-                  { label: 'Merchant', value: plan ? shortAddress(plan.merchant) : '—' },
-                  { label: 'Plan', value: `#${sub.planId}` },
-                  { label: 'Max exposure', value: plan ? `${formatUSDC(plan.amount)} USDC` : '—' },
-                  { label: 'Status', value: sub.active ? 'Active' : 'Cancelled' },
-                ].map((f) => (
-                  <div key={f.label} className="bg-surface-2 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-wider text-ink-faint">{f.label}</p>
-                    <p className="numeric mt-1 text-sm text-ink">{f.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* the receipts — the whole lifetime of this subscription
-                  (subscribed & funded, every charge, cancellation), each
-                  one the same document Wallet/Vault writes end in. Stays
-                  here after cancelling — history, not a live status. */}
-              <div className="mt-5">
-                <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">Receipts</p>
-                {receipts === null && !receiptsError && <LoadingLine label="reading the chain…" />}
-                {receiptsError && <InlineError message={receiptsError} />}
-                {receipts !== null && receipts.length === 0 && (
-                  <p className="text-[11px] text-ink-faint">Nothing on-chain for this subscription yet.</p>
-                )}
-                {receipts !== null && receipts.length > 0 && (
-                  <div className="max-h-64 space-y-4 overflow-y-auto pr-1">
-                    {receipts.map(({ kind, receipt }) => (
-                      <TxReceiptCard
-                        key={receipt.hash}
-                        title={RECEIPT_TITLES[kind]}
-                        receipt={receipt}
-                        rows={
-                          kind === 'cancelled'
-                            ? []
-                            : [
-                                { label: kind === 'subscribed' ? 'Funded' : 'Amount', value: `${formatUSDC(receipt.amount)} USDC` },
-                                { label: kind === 'subscribed' ? 'To the vault' : 'Paid to', value: receipt.to, breakAll: true },
-                              ]
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* the way out — always visible, per the invariant */}
-              {sub.active && (
-                <div className="mt-5 flex flex-col items-center gap-2">
-                  {confirming ? (
-                    <div className="flex w-full gap-2">
-                      <button
-                        onClick={handleCancel}
-                        disabled={cancelling}
-                        className="flex-1 rounded-lg bg-danger px-5 py-2.5 text-sm font-medium text-canvas transition disabled:opacity-40"
-                      >
-                        {cancelling ? 'Cancelling…' : 'Yes, cancel'}
-                      </button>
-                      <button
-                        onClick={() => setConfirming(false)}
-                        disabled={cancelling}
-                        className="flex-1 rounded-lg border border-line px-5 py-2.5 text-sm text-ink transition disabled:opacity-40"
-                      >
-                        Nevermind
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setConfirming(true)}
-                      className="w-full rounded-lg border border-line px-5 py-2.5 text-sm text-ink transition hover:border-danger/40 hover:text-danger"
-                    >
-                      Cancel subscription
-                    </button>
-                  )}
-                  {cancelError ? (
-                    <InlineError message={cancelError} />
-                  ) : (
-                    <p className="text-[11px] text-ink-faint">
-                      your escrow stays yours — withdraw anytime, even mid-cycle
-                    </p>
-                  )}
+              {receipts !== null && receipts.length > 0 && (
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {receipts.map(({ kind, receipt }) => (
+                    <ReceiptListRow
+                      key={receipt.hash}
+                      title={RECEIPT_TITLES[kind]}
+                      amount={kind === 'cancelled' ? undefined : `${formatUSDC(receipt.amount)} USDC`}
+                      counterparty={kind === 'cancelled' ? undefined : receipt.to}
+                      receipt={receipt}
+                    />
+                  ))}
                 </div>
               )}
             </div>
-          </div>
-        </GlassCard>
+          )}
+
+          {/* ── the way out — always visible, per the invariant ── */}
+          {sub.active && (
+            <div className="mt-5 flex flex-col items-center gap-2">
+              {confirming ? (
+                <div className="flex w-full gap-2">
+                  <button
+                    onClick={handleCancel}
+                    disabled={cancelling}
+                    className="flex-1 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition disabled:opacity-40"
+                  >
+                    {cancelling ? 'Cancelling…' : 'Yes, cancel'}
+                  </button>
+                  <button
+                    onClick={() => setConfirming(false)}
+                    disabled={cancelling}
+                    className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm text-ink-muted transition hover:border-ink/40 hover:text-ink disabled:opacity-40"
+                  >
+                    Nevermind
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirming(true)}
+                  className="w-full rounded-full border border-line px-5 py-2.5 text-sm text-ink-muted transition hover:border-ink/40 hover:text-ink"
+                >
+                  Cancel subscription
+                </button>
+              )}
+              {cancelError ? (
+                <InlineError message={cancelError} />
+              ) : (
+                <p className="text-[11px] text-ink-faint">
+                  your escrow stays yours — withdraw anytime, even mid-cycle
+                </p>
+              )}
+            </div>
+          )}
+        </GlassPanel>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
