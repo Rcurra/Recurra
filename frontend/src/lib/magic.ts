@@ -166,11 +166,25 @@ export function getSigner(): RecurraSigner | null {
 // Magic-specific call inside this one file.
 //
 // Maps Magic's response onto viem's `SignedAuthorization` field names
-// (`contractAddress` → `address`, `v: number` → `v: bigint`) so the caller
-// only ever sees generic viem shapes. Dev-wallet mode doesn't need this —
-// a `LocalAccount` signs its own EIP-7702 authorization natively through
-// the generic `RecurraSigner` path, which is why this throws instead of
-// branching: being called in dev mode is a caller bug, not a valid path.
+// (`contractAddress` → `address`) so the caller only ever sees generic
+// viem shapes. Dev-wallet mode doesn't need this — a `LocalAccount` signs
+// its own EIP-7702 authorization natively through the generic
+// `RecurraSigner` path, which is why this throws instead of branching:
+// being called in dev mode is a caller bug, not a valid path.
+//
+// Returns `yParity`, NOT `v` — found live 2026-07-15: passing Magic's `v`
+// straight through as a bigint produced a garbled, wildly-oversized
+// yParity in the actual wire request (verified by reading the raw
+// eth_sendUserOperation payload the bundler rejected), and ZeroDev
+// rejected the whole UserOp with "the recovered signer address does not
+// match" — a corrupted signature, not a business error. EIP-7702
+// authorizations are fundamentally yParity-based (0/1), not legacy-v
+// (27/28) — Magic's SDK, built specifically for 7702, almost certainly
+// already returns the correct yParity in its `v` field; something
+// downstream was evidently applying a legacy `v - 27` style offset to an
+// already-correct value. Normalizing explicitly here, to a plain 0/1,
+// sidesteps that ambiguity regardless of which convention Magic's `v`
+// numeric value actually follows.
 //
 // chainId is always the real chain, never 0 ("universal" cross-chain) —
 // Arbitrum's 7702 delegation slot belongs to ZeroDev's Kernel specifically,
@@ -181,18 +195,21 @@ export async function sign7702Authorization(params: { contractAddress: `0x${stri
   nonce: number;
   r: `0x${string}`;
   s: `0x${string}`;
-  v: bigint;
+  yParity: number;
 }> {
   if (isDevWallet) {
     throw new Error('sign7702Authorization is Magic-only — dev-wallet mode signs its own authorization');
   }
   const auth = await getMagic().wallet.sign7702Authorization(params);
+  // Normalizes either convention to a clean 0/1: legacy v (27/28) offsets
+  // by 27; anything already 0/1 passes through untouched.
+  const yParity = auth.v === 27 || auth.v === 0 ? 0 : 1;
   return {
     address: auth.contractAddress as `0x${string}`,
     chainId: auth.chainId,
     nonce: auth.nonce,
     r: auth.r as `0x${string}`,
     s: auth.s as `0x${string}`,
-    v: BigInt(auth.v),
+    yParity,
   };
 }

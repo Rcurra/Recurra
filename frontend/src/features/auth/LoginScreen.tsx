@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
+import { LoadingLine } from '@/components/LoadingLine';
 import { TickerLine } from '@/components/TickerLine';
 import { RecurraMark } from '@/components/RecurraMark';
 import { Starfield } from '@/components/Starfield';
@@ -23,6 +24,14 @@ const LOGIN_TIMEOUT_MS = 30_000;
 export function LoginScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  // A just-succeeded login flips AuthContext's status to 'authenticated'
+  // the instant the OTP resolves — a render or two before router.push()
+  // actually finishes navigating away. Without this flag, that gap shows
+  // the welcome-back card ("you're already signed in") for a genuinely
+  // fresh login, which reads as if the OTP was skipped. Found live
+  // 2026-07-14. Set only on the success path, deliberately never reset —
+  // this component unmounts on navigation, so there's nothing to reset for.
+  const [redirecting, setRedirecting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   // Two error channels, deliberately: the form shows only login errors,
   // the welcome-back card only sign-out errors. Found live: a login that
@@ -48,8 +57,13 @@ export function LoginScreen() {
           setTimeout(() => reject(new Error('login-timeout')), LOGIN_TIMEOUT_MS),
         ),
       ]);
+      // Success: swap straight to the redirecting state, never back to the
+      // idle form — router.push below unmounts this screen shortly after,
+      // so `loading` has no legitimate false state left to reach.
+      setRedirecting(true);
       router.push('/dashboard');
     } catch (err) {
+      setLoading(false);
       setLoginError(
         err instanceof Error && err.message === 'login-timeout'
           ? "Couldn't reach the login service. Check your connection and try again — hotspots and VPNs sometimes block it."
@@ -57,8 +71,6 @@ export function LoginScreen() {
             ? err.message
             : 'Login failed',
       );
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -84,7 +96,11 @@ export function LoginScreen() {
 
   // A live session isn't silently redirected — that's disorienting and
   // hides the only way to switch accounts. Say it, and offer the choice.
-  const welcomeBack = status === 'authenticated' && address;
+  // Excludes `redirecting`: a login that just succeeded IS an
+  // already-authenticated status the instant it resolves, but it isn't a
+  // "you were already signed in" situation — it's this exact action
+  // finishing. Different screen, same underlying boolean.
+  const welcomeBack = status === 'authenticated' && address && !redirecting;
 
   return (
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-canvas px-6">
@@ -117,9 +133,13 @@ export function LoginScreen() {
                 className="text-lg text-ink"
                 style={{ fontFamily: 'var(--font-display), sans-serif', letterSpacing: '0.08em' }}
               >
-                {welcomeBack ? 'Welcome back' : 'Sign in'}
+                {redirecting ? 'Verified' : welcomeBack ? 'Welcome back' : 'Sign in'}
               </h1>
-              {welcomeBack ? (
+              {redirecting ? (
+                <p className="mt-3 text-[12px] font-light leading-relaxed tracking-[0.04em] text-ink-muted">
+                  Taking you to your dashboard
+                </p>
+              ) : welcomeBack ? (
                 <p className="mt-3 text-[12px] font-light leading-relaxed tracking-[0.04em] text-ink-muted">
                   You&rsquo;re already signed in as
                   <br />
@@ -135,7 +155,11 @@ export function LoginScreen() {
             </div>
           </div>
 
-          {welcomeBack ? (
+          {redirecting ? (
+            <div style={{ animation: 'fadeUp 0.3s ease both' }}>
+              <LoadingLine label="loading your dashboard…" />
+            </div>
+          ) : welcomeBack ? (
             <div style={{ animation: 'fadeUp 0.7s ease both 0.26s' }}>
               <button
                 onClick={() => router.push('/dashboard')}

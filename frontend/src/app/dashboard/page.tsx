@@ -270,6 +270,7 @@ export default function OverviewPage() {
           monthlyTotal: loading ? '…' : `${formatUSDC(monthly)} USDC`,
           nextCharge: loading ? '…' : nextDue ? timeUntil(nextDue.nextPaymentDue) : '—',
         }}
+        monthlyTotalRaw={monthly}
       />
     </div>
   );

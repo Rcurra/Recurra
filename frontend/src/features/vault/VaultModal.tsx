@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
 import { LoadingLine } from '@/components/LoadingLine';
+import { ReceiptListRow } from '@/components/ReceiptListRow';
 import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { formatUSDC, parseUSDC } from '@/lib/format';
 import { getVaultHistory, type VaultReceipt } from '@/lib/receipts';
@@ -42,6 +43,7 @@ export function VaultModal({
   balance,
   onChanged,
   stats,
+  monthlyTotalRaw,
 }: {
   open: boolean;
   onClose: () => void;
@@ -49,6 +51,9 @@ export function VaultModal({
   balance: bigint | null;
   onChanged: () => void;
   stats: { activePlans: string; monthlyTotal: string; nextCharge: string };
+  // Raw bigint alongside stats.monthlyTotal's pre-formatted string — the
+  // withdraw-underfunding check needs the real number, not display text.
+  monthlyTotalRaw: bigint;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -63,7 +68,16 @@ export function VaultModal({
 
   if (!open) return null;
 
-  return <VaultModalContent onClose={onClose} address={address} balance={balance} onChanged={onChanged} stats={stats} />;
+  return (
+    <VaultModalContent
+      onClose={onClose}
+      address={address}
+      balance={balance}
+      onChanged={onChanged}
+      stats={stats}
+      monthlyTotalRaw={monthlyTotalRaw}
+    />
+  );
 }
 
 function VaultModalContent({
@@ -72,17 +86,26 @@ function VaultModalContent({
   balance,
   onChanged,
   stats,
+  monthlyTotalRaw,
 }: {
   onClose: () => void;
   address: string | null;
   balance: bigint | null;
   onChanged: () => void;
   stats: { activePlans: string; monthlyTotal: string; nextCharge: string };
+  monthlyTotalRaw: bigint;
 }) {
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState<'deposit' | 'withdraw' | 'mint' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [done, setDone] = useState<Done | null>(null);
+  // A withdraw that would leave the vault short of its own monthly total
+  // gets a warning instead of executing immediately — never a block
+  // (withdraw() never reverting for policy reasons is a permanent
+  // contract invariant, "uncommitted balance is always theirs, instantly")
+  // but a subscriber who's about to strand their own plan should know
+  // before they sign, not find out when a charge quietly fails later.
+  const [confirmingRiskyWithdraw, setConfirmingRiskyWithdraw] = useState(false);
 
   const [history, setHistory] = useState<VaultReceipt[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -118,6 +141,17 @@ function VaultModalContent({
 
   async function run(kind: 'deposit' | 'withdraw') {
     if (!address || amountUnits === null) return;
+    if (
+      kind === 'withdraw' &&
+      !confirmingRiskyWithdraw &&
+      balance !== null &&
+      monthlyTotalRaw > 0n &&
+      balance - amountUnits < monthlyTotalRaw
+    ) {
+      setConfirmingRiskyWithdraw(true);
+      return;
+    }
+    setConfirmingRiskyWithdraw(false);
     setBusy(kind);
     setActionError(null);
     try {
@@ -231,6 +265,32 @@ function VaultModalContent({
                 </button>
               </div>
             </div>
+          ) : confirmingRiskyWithdraw ? (
+            /* ── the warning — never a block, always a choice ── */
+            <div className="mt-6">
+              <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+                Before you withdraw
+              </p>
+              <p className="text-[12px] font-light leading-relaxed text-ink-muted">
+                This leaves less than your{' '}
+                <span className="numeric text-ink">{stats.monthlyTotal}</span> monthly total —
+                your next charge may fail until you fund it again. Your escrow, your call.
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() => setConfirmingRiskyWithdraw(false)}
+                  className="flex-1 rounded-full border border-line px-5 py-2.5 text-sm text-ink-muted transition hover:border-ink/40 hover:text-ink"
+                >
+                  Keep it funded
+                </button>
+                <button
+                  onClick={() => run('withdraw')}
+                  className="flex-1 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-canvas transition hover:shadow-[0_6px_28px_-8px_rgba(255,255,255,0.5)]"
+                >
+                  Withdraw anyway
+                </button>
+              </div>
+            </div>
           ) : (
             /* ── the move — one amount, two directions ── */
             <div className="mt-6">
@@ -244,6 +304,7 @@ function VaultModalContent({
                     onChange={(e) => {
                       setAmount(e.target.value);
                       if (actionError) setActionError(null);
+                      if (confirmingRiskyWithdraw) setConfirmingRiskyWithdraw(false);
                     }}
                     disabled={busy !== null}
                     placeholder="0.00"
@@ -315,20 +376,14 @@ function VaultModalContent({
               <p className="text-[11px] text-ink-faint">Nothing moved yet.</p>
             )}
             {history !== null && history.length > 0 && (
-              <div className="max-h-64 space-y-4 overflow-y-auto pr-1">
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                 {history.map(({ kind, receipt }) => (
-                  <TxReceiptCard
+                  <ReceiptListRow
                     key={receipt.hash}
                     title={HISTORY_TITLES[kind]}
+                    amount={`${formatUSDC(receipt.amount)} USDC`}
+                    counterparty={receipt.to}
                     receipt={receipt}
-                    rows={[
-                      { label: 'Amount', value: `${formatUSDC(receipt.amount)} USDC` },
-                      {
-                        label: kind === 'deposited' ? 'To the vault' : kind === 'withdrawn' ? 'To your wallet' : 'Paid to',
-                        value: receipt.to,
-                        breakAll: true,
-                      },
-                    ]}
                   />
                 ))}
               </div>

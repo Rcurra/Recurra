@@ -209,7 +209,21 @@ export async function subscribeAndFund(
       : []),
   ];
 
-  const userOpHash = await kernelClient.sendUserOperation({ calls });
+  // Diagnostic-only: a bundler-side validation rejection ("Invalid fields
+  // set on User Operation") is too generic to fix blind — found live
+  // 2026-07-14 on a brand-new real-Magic account's first-ever UserOp
+  // (dev-wallet's test address had already been 7702-delegated from
+  // earlier testing, so it never exercised a fresh authorization the same
+  // way). Logs the full error object — viem errors carry structured detail
+  // (.details, .cause, .metaMessages) that .message alone truncates —
+  // before re-throwing unchanged so walletErrorMessage still handles it.
+  let userOpHash: `0x${string}`;
+  try {
+    userOpHash = await kernelClient.sendUserOperation({ calls });
+  } catch (e) {
+    console.error('subscribeAndFund: sendUserOperation rejected', e);
+    throw e;
+  }
   const userOpReceipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
 
   // Mirrors writeContractSafely's status check in wallet.ts — a UserOp can
