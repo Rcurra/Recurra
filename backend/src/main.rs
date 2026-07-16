@@ -27,8 +27,16 @@ async fn main() {
         .await
         .expect("failed to initialise chain state");
 
-    // Spawn the scheduler as a background task.
-    tokio::spawn(scheduler::run(state.clone()));
+    // Spawn the scheduler as a background task — unless the Track 1 signer
+    // check at boot found (or couldn't rule out) a mismatch against on-chain
+    // authorizedExecutor. The read-only API stays up regardless.
+    if state.scheduler_enabled {
+        tokio::spawn(scheduler::run(state.clone()));
+    } else {
+        tracing::warn!(
+            "scheduler NOT started — see the startup log above for the signer/authorizedExecutor check"
+        );
+    }
 
     let app = Router::new().nest("/api", api::router(state.clone()));
 

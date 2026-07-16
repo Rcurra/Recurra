@@ -105,13 +105,27 @@ async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
         // sender (local wallet on anvil, Openfort on public networks).
         let calldata = call.calldata().clone();
         match state.sender.send(executor, calldata).await {
-            Ok(tx_hash) => tracing::info!(
-                sub_id = sub.id,
-                plan_id = sub.plan_id,
-                subscriber = %sub.subscriber,
-                %tx_hash,
-                "fired executePayment"
-            ),
+            Ok(tx_hash) => {
+                tracing::info!(
+                    sub_id = sub.id,
+                    plan_id = sub.plan_id,
+                    subscriber = %sub.subscriber,
+                    %tx_hash,
+                    "fired executePayment"
+                );
+                // A passing simulation doesn't guarantee the broadcast tx lands
+                // the same way (race, reorg, gas griefing, or authorizedExecutor
+                // rotating out from under us mid-run) — confirm the receipt
+                // actually succeeded instead of trusting the submit alone.
+                if let Err(e) = state.wait_for_success(&tx_hash).await {
+                    tracing::error!(
+                        sub_id = sub.id,
+                        %tx_hash,
+                        error = %e,
+                        "submitted tx did not confirm as successful"
+                    );
+                }
+            }
             Err(e) => tracing::error!(sub_id = sub.id, error = %e, "submit failed"),
         }
     }
