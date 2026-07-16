@@ -10,7 +10,8 @@ import { useAuth } from '@/features/auth';
 import type { Plan, Subscription } from '@/types';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
 import { getSubscriptionReceipts, type SubscriptionReceipt } from '@/lib/receipts';
-import { unsubscribe, walletErrorMessage } from '@/lib/wallet';
+import { unsubscribe } from '@/lib/zerodev';
+import { walletErrorMessage } from '@/lib/wallet';
 
 const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
   subscribed: 'subscribed',

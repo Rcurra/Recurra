@@ -9,13 +9,8 @@ import { ReceiptListRow } from '@/components/ReceiptListRow';
 import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { formatUSDC, parseUSDC } from '@/lib/format';
 import { getVaultHistory, type VaultReceipt } from '@/lib/receipts';
-import {
-  approveAndDeposit,
-  mintTestUsdc,
-  walletErrorMessage,
-  withdraw,
-  type TxReceipt,
-} from '@/lib/wallet';
+import { approveAndDeposit, withdraw } from '@/lib/zerodev';
+import { mintTestUsdc, walletErrorMessage, type TxReceipt } from '@/lib/wallet';
 
 const HISTORY_TITLES: Record<VaultReceipt['kind'], string> = {
   deposited: 'added to vault',
