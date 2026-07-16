@@ -30,9 +30,14 @@ pub enum TxSender {
     Local(DynProvider),
     /// Hosted TEE signer. `chain_id` rides along in the Openfort payload since
     /// the request never touches a local provider that would know it.
+    /// `account_id` is the Openfort `acc_...` ID (distinct from the wallet's
+    /// on-chain address, which lives on `Config`/`AppState` for the Track 1
+    /// signer check) — the transaction-intents API references accounts by
+    /// this ID, not by address.
     Openfort {
         client: Arc<OpenfortClient>,
         chain_id: u64,
+        account_id: String,
     },
 }
 
@@ -52,10 +57,14 @@ impl TxSender {
                     .map_err(|e| AppError::Chain(format!("local tx submit failed: {e}")))?;
                 Ok(pending.tx_hash().to_string())
             }
-            TxSender::Openfort { client, chain_id } => {
+            TxSender::Openfort {
+                client,
+                chain_id,
+                account_id,
+            } => {
                 let data = format!("0x{}", alloy::hex::encode(&calldata));
                 let signed = client
-                    .send_transaction(&to.to_checksum(None), &data, *chain_id)
+                    .send_transaction(account_id, &to.to_checksum(None), &data, *chain_id)
                     .await?;
                 Ok(signed.tx_hash)
             }

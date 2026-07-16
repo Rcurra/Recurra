@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "openfort": {
+      "source": "openfort-xyz/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/openfort/SKILL.md",
+      "computedHash": "69da5948428ce508e8bb359364595915df820948becaccafddb63fe9b1c2c8d0"
+    },
+    "openfort-backend-wallets": {
+      "source": "openfort-xyz/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/backend-wallet/SKILL.md",
+      "computedHash": "bb5da2ea79075fcecfa4d56ee7187077a158957e0706f055f9d7126f07767605"
+    },
+    "openfort-cli": {
+      "source": "openfort-xyz/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/openfort-cli/SKILL.md",
+      "computedHash": "e13d78830d43fd700ec65956a295ea1f91dd65f535857f05858cca1118e494d5"
+    },
+    "openfort-embedded-wallet": {
+      "source": "openfort-xyz/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/embedded-wallet/SKILL.md",
+      "computedHash": "781f743cebc89c640c82688ec6ff25cd12400a9b943cf430317ab5dd8b23914f"
+    }
+  }
+}

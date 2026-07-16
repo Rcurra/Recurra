@@ -23,3 +23,19 @@ pub struct Subscription {
     pub next_payment_due: DateTime<Utc>,
     pub active: bool,
 }
+
+/// One historical `PaymentExecuted` event — the record `GET /api/payments`
+/// serves. Mirrors the frontend's `TxReceipt` shape closely enough that F5's
+/// Activity screen can render it through the same `TxReceiptCard`/
+/// `ReceiptListRow` components already built for wallet/vault receipts.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Payment {
+    pub sub_id: u64,
+    pub subscriber: String, // checksummed Ethereum address
+    pub merchant: String,   // checksummed Ethereum address
+    pub token: String,      // ERC-20 token address
+    pub amount: String,     // token smallest-unit string, to avoid float precision loss
+    pub tx_hash: String,
+    pub block_number: u64,
+    pub timestamp: DateTime<Utc>,
+}
