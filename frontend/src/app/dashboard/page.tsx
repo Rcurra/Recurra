@@ -190,16 +190,30 @@ export default function OverviewPage() {
         style={{ animation: 'fadeUp 0.7s ease both 0.08s' }}
       >
         {[
-          { label: 'Runway', value: runwayLabel(vaultBalance, monthly) ?? '—' },
-          { label: 'Monthly commitment', value: charging.length ? `${formatUSDC(monthly)} USDC` : '—' },
+          {
+            label: 'Runway',
+            value: runwayLabel(vaultBalance, monthly) ?? '—',
+            hint: "How long your vault covers every active plan if you don't add more funds.",
+          },
+          {
+            label: 'Monthly commitment',
+            value: charging.length ? `${formatUSDC(monthly)} USDC` : '—',
+            hint: 'What every active plan adds up to, per month, combined.',
+          },
           {
             label: 'Next charge',
             value: nextDue
               ? `${plans.get(nextDue.planId) ? formatUSDC(plans.get(nextDue.planId)!.amount) : '—'} USDC ${timeUntil(nextDue.nextPaymentDue)}`
               : '—',
+            hint: 'The very next payment due across all your plans, and when.',
           },
+          // hint: a one-line native tooltip (title attribute, no component
+          // change, zero visual footprint until hovered) — these three
+          // numbers read as self-explanatory once you know the app, but
+          // not on first glance, and a calm dashboard shouldn't need a
+          // help page for three stats.
         ].map((stat) => (
-          <GlassCard key={stat.label} className="px-5 py-4">
+          <GlassCard key={stat.label} className="px-5 py-4" title={stat.hint}>
             <p className="text-[9px] uppercase tracking-[0.2em] text-ink-faint">{stat.label}</p>
             <p className="numeric mt-1.5 truncate text-sm text-ink">{stat.value}</p>
           </GlassCard>

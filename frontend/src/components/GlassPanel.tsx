@@ -43,17 +43,22 @@ export function GlassPanel({
   hairline = false,
   className = '',
   style,
+  title,
   children,
 }: {
   as?: ElementType;
   hairline?: boolean;
   className?: string;
   style?: CSSProperties;
+  // Native browser tooltip on hover — no design footprint until hovered,
+  // no new component. Optional; most panels don't need it.
+  title?: string;
   children: ReactNode;
 }) {
   return (
     <Tag
       className={`relative isolate overflow-hidden rounded-2xl ${className}`}
+      title={title}
       style={{
         background: 'var(--glass-bg)',
         backdropFilter: 'blur(var(--glass-blur))',
