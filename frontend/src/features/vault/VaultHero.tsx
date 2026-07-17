@@ -25,6 +25,14 @@ export function VaultHero({
   onOpenVault: () => void;
 }) {
   const runway = runwayLabel(balance, monthly);
+  // runwayLabel is null both when there's genuinely nothing to compute
+  // (balance not loaded, or monthly is 0 — nothing's actually charging)
+  // and when there IS a real balance/commitment but it covers less than a
+  // day — underfunded. Those two null-causes need different sentences;
+  // conflating them used to render "covers everything for not enough for
+  // the next charge" verbatim (runwayLabel's old string return was truthy,
+  // so the ternary below never saw the difference).
+  const underfunded = runway === null && balance !== null && monthly > 0n;
 
   return (
     <GlassPanel hairline className="relative">
@@ -40,6 +48,10 @@ export function VaultHero({
 
         {runway ? (
           <p className="mt-3 text-xs tracking-[0.06em] text-ink-muted">covers everything for {runway}</p>
+        ) : underfunded ? (
+          <p className="mt-3 text-xs tracking-[0.06em] text-violet-light">
+            can&apos;t cover your next charge yet — add funds to keep it running
+          </p>
         ) : (
           <p className="mt-3 text-xs tracking-[0.06em] text-ink/90">
             {hasActive ? ' ' : 'fund it once — everything recurring pays itself from here'}

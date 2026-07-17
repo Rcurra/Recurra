@@ -82,6 +82,15 @@ export default function OverviewPage() {
   const nextDue = charging.length
     ? charging.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
     : null;
+  // runwayLabel is null for three different reasons (no balance yet,
+  // nothing charging, or genuinely underfunded — < 1 day of runway) but
+  // only the last one is worth saying anything about here; the other two
+  // just read as no-data. A short word, not a sentence: this column is
+  // one stat card wide, and the full underfunded story already lives in
+  // the banner above when that state is active.
+  const runwayValue =
+    runwayLabel(vaultBalance, monthly) ??
+    (vaultBalance !== null && charging.length > 0 ? 'underfunded' : '—');
   // Top 4 soonest-due — but a charge that just fired advances that sub's
   // nextPaymentDue a full interval, which usually knocks it straight out
   // of "soonest 4" in this same recompute. Pin anything still `justCharged`
@@ -192,7 +201,7 @@ export default function OverviewPage() {
         {[
           {
             label: 'Runway',
-            value: runwayLabel(vaultBalance, monthly) ?? '—',
+            value: runwayValue,
             hint: "How long your vault covers every active plan if you don't add more funds.",
           },
           {

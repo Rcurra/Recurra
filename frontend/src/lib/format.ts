@@ -80,13 +80,20 @@ export function monthlyEquivalent(amount: bigint, intervalSecs: number): bigint 
   return (amount * 2_592_000n) / BigInt(Math.max(intervalSecs, 1));
 }
 
-// The runway sentence — balance ÷ 30-day-normalized commitments, spoken
-// in human time. Null when there's nothing to say (no balance yet, or no
-// active commitments to measure against). Display math only.
+// The runway DURATION, spoken in human time — balance ÷ 30-day-normalized
+// commitments. Null whenever there's no duration worth reporting: no
+// balance yet, no active commitments to measure against, OR underfunded
+// (< 1 day). That last case used to return the sentence "not enough for
+// the next charge" instead of null — a truthy string every caller then
+// had to know to special-case. Found live: VaultHero didn't, and wrapped
+// it verbatim in "covers everything for {runway}", producing "covers
+// everything for not enough for the next charge" for anyone underfunded.
+// Callers now decide their own underfunded copy from a plain null,
+// same as the other null cases — one contract, not a hidden second one.
 export function runwayLabel(balance: bigint | null, monthly: bigint): string | null {
   if (balance === null || monthly <= 0n) return null;
   const totalDays = Number((balance * 30n) / monthly);
-  if (totalDays < 1) return 'not enough for the next charge';
+  if (totalDays < 1) return null;
   const months = Math.floor(totalDays / 30);
   const days = totalDays % 30;
   if (months > 0) {
