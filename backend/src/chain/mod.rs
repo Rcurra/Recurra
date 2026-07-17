@@ -56,10 +56,14 @@ pub struct AppState {
     /// a dashboard poll (or a bare curl loop) multiplied into unbounded RPC
     /// work against the archive endpoint. `Arc` so clones of `AppState` share
     /// one cache; std `Mutex` since it's never held across an await.
-    payments_cache: Arc<Mutex<HashMap<Option<Address>, (Instant, Vec<Payment>)>>>,
+    payments_cache: Arc<Mutex<PaymentsCache>>,
     /// Raw config, kept for the scheduler interval, vault address, etc.
     pub cfg: Config,
 }
+
+/// One `fetch_payments` result per subscriber filter, tagged with when it
+/// was scanned so `CACHE_TTL` can age it out.
+type PaymentsCache = HashMap<Option<Address>, (Instant, Vec<Payment>)>;
 
 /// Result of comparing the configured signer against on-chain
 /// `authorizedExecutor` — pulled out of `AppState::new` as a pure function so
@@ -405,10 +409,10 @@ impl AppState {
         // anyone needs payment history to move, and turns the frontend's
         // polling (plus any hostile curl loop) into one scan per window
         // instead of one per request.
-        if let Some((at, cached)) = self.payments_cache.lock().unwrap().get(&subscriber) {
-            if at.elapsed() < CACHE_TTL {
-                return Ok(cached.clone());
-            }
+        if let Some((at, cached)) = self.payments_cache.lock().unwrap().get(&subscriber)
+            && at.elapsed() < CACHE_TTL
+        {
+            return Ok(cached.clone());
         }
 
         let logs_provider: DynProvider = if self.chain_id == 421_614 {
