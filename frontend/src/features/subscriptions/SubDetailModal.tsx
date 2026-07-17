@@ -121,7 +121,7 @@ function SubDetailContent({
 
   useEffect(() => {
     let cancelled = false;
-    getSubscriptionReceipts(sub.id)
+    getSubscriptionReceipts(sub.id, sub.subscriber)
       .then((r) => {
         if (!cancelled) setReceipts(r);
       })
@@ -131,7 +131,7 @@ function SubDetailContent({
     return () => {
       cancelled = true;
     };
-  }, [sub.id]);
+  }, [sub.id, sub.subscriber]);
 
   async function handleCancel() {
     if (!address) return;

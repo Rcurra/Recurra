@@ -17,3 +17,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Ethereum client: typed contract bindings via the sol! macro + JSON-RPC provider.
 # `full` pulls in providers, contract, sol-types and the HTTP transport.
 alloy = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+# node-bindings (spawning anvil from Rust) is test-only — feature-added here
+# so the release binary's dependency surface stays unchanged.
+alloy = { version = "1", features = ["full", "node-bindings"] }

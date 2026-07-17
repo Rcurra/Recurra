@@ -1,13 +1,5 @@
-mod api;
-mod chain;
-mod config;
-mod errors;
-mod models;
-mod openfort;
-mod scheduler;
-mod sender;
-
 use axum::Router;
+use backend::{api, chain, config, scheduler};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
 #[tokio::main]

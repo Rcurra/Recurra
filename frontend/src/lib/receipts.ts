@@ -1,10 +1,13 @@
-// Per-subscription receipt history — a TEMPORARY STOPGAP. CONCEPT.md's
-// rule is "reads come from the backend API, never the chain directly"; this
-// file breaks that rule on purpose because the backend endpoint that should
-// serve this (GET /api/payments — Track 2 in backend/plan.md) doesn't exist
-// yet. Delete this file and read from that endpoint instead once it ships;
-// nothing about the SubDetailModal UI consuming it should need to change,
-// since it already returns the same TxReceipt shape wallet.ts's writes do.
+// Receipt history for one subscription / one vault. CHARGES — the money
+// actually moving — come from the backend's GET /payments (PaymentExecuted
+// history) per CONCEPT.md's "reads come from the backend API" rule; the
+// original chain-scan for them is gone. What REMAINS a direct chain scan,
+// deliberately and documented: the lifecycle markers (Subscribed /
+// Unsubscribed on the registry, Deposited / Withdrawn on the vault), which
+// the backend doesn't index — a subscription with zero charges yet (the
+// common case right after subscribing) must still show proof the
+// subscribe+fund happened, and a cancel must survive in the trail. Extend
+// GET /payments into a full event index and this file shrinks again.
 //
 // Found live 2026-07-14: not every public RPC allows a wide getLogs range
 // without an archive-node subscription (publicnode.com's free Arbitrum
@@ -12,35 +15,34 @@
 // endpoint (sepolia-rollup.arbitrum.io/rpc) does not have this restriction —
 // use it here specifically, independent of whatever NEXT_PUBLIC_RPC_URL is
 // set to, since a wide historical scan is exactly the case that breaks.
-//
-// Also found live 2026-07-14: a receipt only for PaymentExecuted meant a
-// subscription with zero charges yet (the common case right after
-// subscribing) showed nothing at all — no proof the subscribe+fund
-// transaction itself ever happened, and nothing survived past cancelling.
-// This scans all three subscription-lifetime events (Subscribed,
-// PaymentExecuted, Unsubscribed) so the trail never goes empty.
 
 import { createPublicClient, http, parseAbiItem, parseEventLogs } from 'viem';
+import { api } from '@/services/api';
+import type { Payment } from '@/types';
 import { getChain } from './chain';
-import { getExecutorAddress, getExecutorDeployBlock, getRegistryAddress, getVaultAddress } from './contracts';
+import { getExecutorDeployBlock, getRegistryAddress, getVaultAddress } from './contracts';
 import { buildTxReceipt, type TxReceipt } from './wallet';
 
 const subscribedEvent = parseAbiItem(
   'event Subscribed(uint256 indexed subId, address indexed subscriber, uint256 indexed planId)',
 );
 const unsubscribedEvent = parseAbiItem('event Unsubscribed(uint256 indexed subId)');
-const paymentExecutedEvent = parseAbiItem(
-  'event PaymentExecuted(uint256 indexed subId, address indexed subscriber, address indexed merchant, address token, uint256 amount)',
-);
 const depositedEvent = parseAbiItem(
   'event Deposited(address indexed subscriber, address indexed token, uint256 amount)',
 );
 const withdrawnEvent = parseAbiItem(
   'event Withdrawn(address indexed subscriber, address indexed token, uint256 amount)',
 );
-const debitedEvent = parseAbiItem(
-  'event Debited(address indexed subscriber, address indexed token, uint256 amount, address recipient)',
-);
+
+// A Payment from the API already carries everything TxReceipt needs — no
+// per-row chain lookups (buildTxReceipt's block fetch) for charges anymore.
+const paymentToReceipt = (p: Payment): TxReceipt => ({
+  hash: p.txHash,
+  to: p.merchant,
+  amount: p.amount,
+  blockNumber: p.blockNumber,
+  timestamp: p.timestamp,
+});
 
 export type SubscriptionReceipt = { kind: 'subscribed' | 'charged' | 'cancelled'; receipt: TxReceipt };
 export type VaultReceipt = { kind: 'deposited' | 'withdrawn' | 'charged'; receipt: TxReceipt };
@@ -71,22 +73,24 @@ async function findDepositedAmount(
   return deposit ? (deposit.args.amount as bigint) : 0n;
 }
 
-// The full receipt trail for one subscription — oldest first. Returns []
-// (not an error) when the executor address isn't configured — an older env
-// predating this feature, not a real failure.
-export async function getSubscriptionReceipts(subId: number): Promise<SubscriptionReceipt[]> {
-  const executor = getExecutorAddress();
-  if (!executor) return [];
-
+// The full receipt trail for one subscription — oldest first. Charges come
+// from the API (filtered to this sub — GET /payments serves a subscriber's
+// whole history); Subscribed/Unsubscribed stay chain scans per the header.
+// `subscriber` is required so the API call can use the indexed filter
+// instead of ever asking for everyone's history.
+export async function getSubscriptionReceipts(
+  subId: number,
+  subscriber: string,
+): Promise<SubscriptionReceipt[]> {
   const client = getLogsClient();
   const registry = getRegistryAddress();
   const vault = getVaultAddress();
   const fromBlock = getExecutorDeployBlock();
   const id = BigInt(subId);
 
-  const [subscribedLogs, paymentLogs, unsubscribedLogs] = await Promise.all([
+  const [subscribedLogs, payments, unsubscribedLogs] = await Promise.all([
     client.getLogs({ address: registry, event: subscribedEvent, args: { subId: id }, fromBlock, toBlock: 'latest' }),
-    client.getLogs({ address: executor, event: paymentExecutedEvent, args: { subId: id }, fromBlock, toBlock: 'latest' }),
+    api.payments.list(subscriber),
     client.getLogs({ address: registry, event: unsubscribedEvent, args: { subId: id }, fromBlock, toBlock: 'latest' }),
   ]);
 
@@ -102,13 +106,9 @@ export async function getSubscriptionReceipts(subId: number): Promise<Subscripti
     results.push({ kind: 'subscribed', receipt });
   }
 
-  for (const log of paymentLogs) {
-    const receipt = await buildTxReceipt(
-      { transactionHash: log.transactionHash, blockNumber: log.blockNumber },
-      log.args.merchant as string,
-      log.args.amount as bigint,
-    );
-    results.push({ kind: 'charged', receipt });
+  for (const p of payments) {
+    if (p.subId !== subId) continue;
+    results.push({ kind: 'charged', receipt: paymentToReceipt(p) });
   }
 
   for (const log of unsubscribedLogs) {
@@ -126,19 +126,22 @@ export async function getSubscriptionReceipts(subId: number): Promise<Subscripti
 }
 
 // Every completed money movement touching this address's vault escrow,
-// across all subscriptions — deposits, withdrawals, and charges (Debited,
-// merchant-bound). The subscription-scoped view above answers "what did
-// this plan do"; this answers "what happened to my vault, full stop."
+// across all subscriptions — deposits, withdrawals, and charges. Charges
+// come from the API: every Debited has a 1:1 PaymentExecuted in the same
+// transaction (executePayment emits both), so GET /payments IS the
+// charge history — no separate Debited scan needed. The subscription-
+// scoped view above answers "what did this plan do"; this answers "what
+// happened to my vault, full stop."
 export async function getVaultHistory(address: string): Promise<VaultReceipt[]> {
   const vault = getVaultAddress();
   const client = getLogsClient();
   const fromBlock = getExecutorDeployBlock();
   const subscriber = address as `0x${string}`;
 
-  const [depositLogs, withdrawLogs, debitLogs] = await Promise.all([
+  const [depositLogs, withdrawLogs, payments] = await Promise.all([
     client.getLogs({ address: vault, event: depositedEvent, args: { subscriber }, fromBlock, toBlock: 'latest' }),
     client.getLogs({ address: vault, event: withdrawnEvent, args: { subscriber }, fromBlock, toBlock: 'latest' }),
-    client.getLogs({ address: vault, event: debitedEvent, args: { subscriber }, fromBlock, toBlock: 'latest' }),
+    api.payments.list(address),
   ]);
 
   const results: VaultReceipt[] = [];
@@ -161,13 +164,8 @@ export async function getVaultHistory(address: string): Promise<VaultReceipt[]> 
     results.push({ kind: 'withdrawn', receipt });
   }
 
-  for (const log of debitLogs) {
-    const receipt = await buildTxReceipt(
-      { transactionHash: log.transactionHash, blockNumber: log.blockNumber },
-      log.args.recipient as string,
-      log.args.amount as bigint,
-    );
-    results.push({ kind: 'charged', receipt });
+  for (const p of payments) {
+    results.push({ kind: 'charged', receipt: paymentToReceipt(p) });
   }
 
   return results.sort((a, b) =>

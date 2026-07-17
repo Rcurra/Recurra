@@ -6,6 +6,7 @@ use tokio::time;
 use crate::chain::AppState;
 use crate::chain::bindings::PaymentExecutor;
 use crate::errors::AppError;
+use crate::models::Subscription;
 
 // Wakes up every `cfg.scheduler_interval_secs` seconds, checks the registry for
 // overdue subscriptions, and (once contracts land) fires payments through Openfort.
@@ -36,6 +37,21 @@ async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
 
     tracing::info!(count = due.len(), "found due subscriptions");
 
+    process_subscriptions(state, due).await
+}
+
+/// The per-subscription triage-and-fire loop, split from the due-list fetch
+/// above so the anvil-backed integration test (`tests/scheduler_triage.rs`)
+/// can replay a STALE due list against chain state that changed after the
+/// fetch. That's not test-only contrivance — it's exactly the shape of the
+/// races these branches exist for (`NotDue` / `SubscriptionInactive` /
+/// `InsufficientVaultBalance` at simulate time all mean "the chain moved
+/// between our read and our act"), just made deterministic. `run` always
+/// calls this with a fresh fetch; the tick's behavior is unchanged.
+pub async fn process_subscriptions(
+    state: &AppState,
+    due: Vec<Subscription>,
+) -> Result<(), AppError> {
     // Without an executor address we can't fire — stay in log-only mode rather
     // than erroring every tick.
     let Some(executor) = state.executor else {

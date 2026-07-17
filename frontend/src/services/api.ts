@@ -1,4 +1,4 @@
-import type { Plan, Subscription } from '@/types';
+import type { Payment, Plan, Subscription } from '@/types';
 import { getUsdcAddress } from '@/lib/contracts';
 
 // The ONLY file that talks to the backend. Two jobs:
@@ -31,6 +31,17 @@ interface SubscriptionWire {
   session_key: string | null;
   next_payment_due: string;
   active: boolean;
+}
+
+interface PaymentWire {
+  sub_id: number;
+  subscriber: string;
+  merchant: string;
+  token: string;
+  amount: string;
+  tx_hash: string;
+  block_number: number;
+  timestamp: string;
 }
 
 export class ApiError extends Error {
@@ -79,6 +90,17 @@ const toSubscription = (w: SubscriptionWire): Subscription => ({
   active: w.active,
 });
 
+const toPayment = (w: PaymentWire): Payment => ({
+  subId: w.sub_id,
+  subscriber: w.subscriber,
+  merchant: w.merchant,
+  token: w.token,
+  amount: BigInt(w.amount),
+  txHash: w.tx_hash,
+  blockNumber: BigInt(w.block_number),
+  timestamp: new Date(w.timestamp),
+});
+
 export const api = {
   plans: {
     list: async (): Promise<Plan[]> =>
@@ -101,5 +123,15 @@ export const api = {
     },
     get: async (id: number): Promise<Subscription> =>
       toSubscription(await get<SubscriptionWire>(`/subscriptions/${id}`)),
+  },
+  payments: {
+    // Every PaymentExecuted for one subscriber, oldest first (the backend's
+    // block-number sort). Same required-filter convention as subscriptions —
+    // the unfiltered form exists server-side but no screen needs everyone's
+    // history.
+    list: async (subscriber: string): Promise<Payment[]> => {
+      const query = `?subscriber=${encodeURIComponent(subscriber)}`;
+      return (await get<PaymentWire[]>(`/payments${query}`)).map(toPayment);
+    },
   },
 };

@@ -1,17 +1,22 @@
 # Backend CI — format check, clippy, build, and cargo test on every
-# push/PR that touches backend/. No live chain needed: Config::from_env()
-# only runs inside main() at process start, never during build/check/
-# clippy/test, so this suite needs no RPC, no env file, no secrets.
+# push/PR that touches backend/. No live NETWORK needed, but the
+# scheduler-triage integration test spins its own local anvil and deploys
+# the contracts through Deploy.s.sol — hence Foundry on PATH, the
+# contracts/ submodule checkout, and the contracts paths trigger below
+# (the test deploys whatever contracts/ currently holds, so contract
+# changes must re-run it too). Still no external RPC, env file or secrets.
 name: backend
 
 on:
   push:
     paths:
       - "backend/**"
+      - "contracts/**"
       - ".github/workflows/backend-ci.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "contracts/**"
       - ".github/workflows/backend-ci.yml"
 
 jobs:
@@ -22,10 +27,14 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - uses: foundry-rs/foundry-toolchain@v1
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -40,5 +49,11 @@ jobs:
       - name: Build
         run: cargo build --all-targets
 
+      # RECURRA_REQUIRE_ANVIL turns the integration test's local skip
+      # (anvil/forge not installed) into a hard failure here — CI installing
+      # Foundry and then silently skipping the test would be worse than no
+      # test at all.
       - name: Test
         run: cargo test
+        env:
+          RECURRA_REQUIRE_ANVIL: "1"
