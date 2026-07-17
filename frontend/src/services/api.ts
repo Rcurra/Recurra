@@ -92,10 +92,11 @@ export const api = {
     },
   },
   subscriptions: {
-    // `subscriber` filters server-side (the cheap per-subscriber path);
-    // omitting it walks every subscription — dashboard should always pass it.
-    list: async (subscriber?: string): Promise<Subscription[]> => {
-      const query = subscriber ? `?subscriber=${encodeURIComponent(subscriber)}` : '';
+    // `subscriber` is required — it filters server-side (O(k) in the
+    // caller's own subs), and the backend 400s the unfiltered form now:
+    // walking every subscription ever issued was O(n) RPC work nobody used.
+    list: async (subscriber: string): Promise<Subscription[]> => {
+      const query = `?subscriber=${encodeURIComponent(subscriber)}`;
       return (await get<SubscriptionWire[]>(`/subscriptions${query}`)).map(toSubscription);
     },
     get: async (id: number): Promise<Subscription> =>
