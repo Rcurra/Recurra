@@ -1,7 +1,9 @@
 // F3's signer abstraction — direct viem writes against the deployed
-// contracts, dev-mode only. F4 re-points subscribe+fund at the Kernel
-// account behind an identical call shape (the CONCEPT.md dev-mode
-// promise); everything else here stays feature code's one door to viem.
+// contracts. Gasless-writes pass moved every money-moving write except
+// `mintTestUsdc` (a dev/testnet-only faucet, deliberately left as a plain
+// tx — no reason to gas-sponsor a fake mint) over to lib/zerodev.ts's
+// Kernel/paymaster path; this file is now mostly reads plus the shared
+// error-decoding/receipt-building utilities both files call into.
 //
 // Every function takes the connected address explicitly (from useAuth())
 // rather than reading it off the wallet client, because the real-Magic
@@ -22,11 +24,7 @@ import {
   ContractFunctionRevertedError,
   createPublicClient,
   decodeErrorResult,
-  getAddress,
   http,
-  isAddress,
-  parseEventLogs,
-  zeroAddress,
   type Abi,
   type Address,
   type PublicClient,
@@ -34,14 +32,7 @@ import {
 } from 'viem';
 import { getChain } from './chain';
 import { getWalletClient, getWriteAccount } from './magic';
-import {
-  getRegistryAddress,
-  getUsdcAddress,
-  getVaultAddress,
-  registryAbi,
-  usdcAbi,
-  vaultAbi,
-} from './contracts';
+import { getUsdcAddress, getVaultAddress, registryAbi, usdcAbi, vaultAbi } from './contracts';
 
 let publicClient: PublicClient | null = null;
 
@@ -88,84 +79,6 @@ async function writeContractSafely(
     throw new Error(`${params.functionName}() reverted on-chain despite passing simulation`);
   }
   return receipt;
-}
-
-export async function subscribe(address: string, planId: number): Promise<number> {
-  const walletClient = requireWalletClient();
-  const receipt = await writeContractSafely(walletClient, address as `0x${string}`, {
-    address: getRegistryAddress(),
-    abi: registryAbi,
-    functionName: 'subscribe',
-    args: [BigInt(planId)],
-  });
-  const [event] = parseEventLogs({ abi: registryAbi, eventName: 'Subscribed', logs: receipt.logs });
-  if (!event) throw new Error('subscribe() succeeded but no Subscribed event was found in the receipt');
-  return Number(event.args.subId);
-}
-
-export async function unsubscribe(address: string, subId: number): Promise<void> {
-  const walletClient = requireWalletClient();
-  await writeContractSafely(walletClient, address as `0x${string}`, {
-    address: getRegistryAddress(),
-    abi: registryAbi,
-    functionName: 'unsubscribe',
-    args: [BigInt(subId)],
-  });
-}
-
-// Approve only if the current allowance is short, then deposit — two
-// signatures in dev mode (three counting a prior subscribe); F4 batches
-// this whole sequence into the one-signature UserOp. onStep is optional,
-// purely for a caller that wants to show "step 2 of 3" progress (the
-// subscribe flow's signature-collapse stub) — skipped entirely if the
-// allowance already covers the amount.
-export async function approveAndDeposit(
-  address: string,
-  amount: bigint,
-  onStep?: (step: 'approve' | 'deposit') => void,
-): Promise<TxReceipt> {
-  const walletClient = requireWalletClient();
-  const usdc = getUsdcAddress();
-  const vault = getVaultAddress();
-  const account = address as `0x${string}`;
-
-  const allowance = await getPublicClient().readContract({
-    address: usdc,
-    abi: usdcAbi,
-    functionName: 'allowance',
-    args: [account, vault],
-  });
-
-  if (allowance < amount) {
-    onStep?.('approve');
-    await writeContractSafely(walletClient, account, {
-      address: usdc,
-      abi: usdcAbi,
-      functionName: 'approve',
-      args: [vault, amount],
-    });
-  }
-
-  onStep?.('deposit');
-  // the receipt is for the deposit — the tx where money actually moves
-  const receipt = await writeContractSafely(walletClient, account, {
-    address: vault,
-    abi: vaultAbi,
-    functionName: 'deposit',
-    args: [usdc, amount],
-  });
-  return buildTxReceipt(receipt, vault, amount);
-}
-
-export async function withdraw(address: string, amount: bigint): Promise<TxReceipt> {
-  const walletClient = requireWalletClient();
-  const receipt = await writeContractSafely(walletClient, address as `0x${string}`, {
-    address: getVaultAddress(),
-    abi: vaultAbi,
-    functionName: 'withdraw',
-    args: [getUsdcAddress(), amount],
-  });
-  return buildTxReceipt(receipt, address, amount);
 }
 
 // Plain-English translations for the custom errors defined in
@@ -268,27 +181,9 @@ export async function getUsdcBalance(address: string): Promise<bigint> {
   });
 }
 
-// The one action in the app that moves money OUT of Recurra's world
-// entirely — a plain ERC-20 transfer from the user's own wallet to any
-// address they type. F4.5's security rules, all enforced here at the
-// boundary, not just in the UI:
-// - destination must be a well-formed address (checksummed via
-//   getAddress) BEFORE anything is signed — a typo must fail loudly,
-//   never become unrecoverable
-// - explicit zero-address block, belt-and-suspenders over the token's own
-// - same simulate-then-write-then-check-receipt path as every other write
-// - NOT gated behind NEXT_PUBLIC_DEV_WALLET: unlike the mint faucet, a
-//   plain transfer works identically in dev and real mode
-//
-// PERMANENT SECURITY BOUNDARY (from frontend/plan.md F4.5): when the
-// ZeroDev session key lands in F4, this function must NEVER be delegated
-// to it. The session key's model is a fixed allowlist of known contracts;
-// "send to whatever the user typed" is fundamentally incompatible with
-// an allowlist. Send always requires a fresh, full owner signature — in
-// dev mode and Kernel mode alike. Not a UX preference; do not revisit.
-// Every money-moving call returns one of these — the receipt page's
-// facts, read back from the mined transaction and its block, never from
-// what a form believed.
+// Every money-moving call returns one of these — the receipt page's facts,
+// read back from the mined transaction and its block, never from what a
+// form believed.
 export type TxReceipt = {
   hash: string;
   to: string; // checksummed counterparty, as actually used on-chain
@@ -330,25 +225,4 @@ export async function buildTxReceipt(
     blockNumber: receipt.blockNumber,
     timestamp: new Date(Number(block.timestamp) * 1000),
   };
-}
-
-export async function transferUsdc(from: string, to: string, amount: bigint): Promise<TxReceipt> {
-  if (!isAddress(to)) {
-    throw new Error("That doesn't look like a valid address — check it and try again.");
-  }
-  const destination = getAddress(to); // checksummed, canonical
-  if (destination === zeroAddress) {
-    throw new Error('That is the zero address — funds sent there are gone forever.');
-  }
-  if (amount <= 0n) {
-    throw new Error('Enter an amount greater than zero.');
-  }
-  const walletClient = requireWalletClient();
-  const receipt = await writeContractSafely(walletClient, from as `0x${string}`, {
-    address: getUsdcAddress(),
-    abi: usdcAbi,
-    functionName: 'transfer',
-    args: [destination, amount],
-  });
-  return buildTxReceipt(receipt, destination, amount);
 }

@@ -24,7 +24,7 @@
 // service — a real trap, found live 2026-07-14), one URL serving both
 // bundler and paymaster JSON-RPC methods.
 
-import { encodeFunctionData, http, parseEventLogs } from 'viem';
+import { encodeFunctionData, getAddress, http, isAddress, parseEventLogs, zeroAddress } from 'viem';
 import { createKernelAccount, createKernelAccountClient, createZeroDevPaymasterClient, constants as zerodevConstants } from '@zerodev/sdk';
 import { signerToEcdsaValidator } from '@zerodev/ecdsa-validator';
 import { toPermissionValidator } from '@zerodev/permissions';
@@ -166,6 +166,80 @@ async function buildSessionKernelClient(depositCap: bigint, expirySeconds: numbe
   return { kernelClient, vaultAddress, usdcAddress, registryAddress };
 }
 
+// The gasless-writes path (everything except Subscribe, which keeps its own
+// session-key builder above): a Kernel account with ONLY the owner's sudo
+// validator installed, no session key, no call-policy scoping, no expiry —
+// full owner authority, still paid for by ZeroDev's paymaster. Gas
+// sponsorship and session keys are separate concerns; only Subscribe needs
+// the latter (so recurring UX needs zero signatures after the first one).
+// Everything routed through this builder still requires a fresh signature
+// exactly like a plain-EOA write did — the only thing that changes is who
+// pays for gas, never who authorizes the call. Confirmed against the
+// installed @zerodev/sdk types (KernelPluginManagerParams) that `sudo` and
+// `regular` are both optional — sudo-only is a valid, standard construction.
+async function buildOwnerKernelClient() {
+  const signer = getSigner();
+  if (!signer) throw new Error('Not logged in — no signer available for the smart account');
+
+  const publicClient = getPublicClient();
+  const chain = getChain();
+
+  const eip7702Auth = isDevWallet
+    ? undefined
+    : await sign7702Authorization({
+        contractAddress: zerodevConstants.KERNEL_7702_DELEGATION_ADDRESS,
+        chainId: chain.id,
+      });
+
+  const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+    signer,
+    entryPoint: ENTRY_POINT,
+    kernelVersion: KERNEL_VERSION,
+  });
+
+  const account = await createKernelAccount(publicClient, {
+    eip7702Account: signer,
+    eip7702Auth,
+    entryPoint: ENTRY_POINT,
+    kernelVersion: KERNEL_VERSION,
+    plugins: { sudo: ecdsaValidator },
+  });
+
+  const rpc = http(getZeroDevRpc());
+  const paymasterClient = createZeroDevPaymasterClient({ chain, transport: rpc });
+
+  return createKernelAccountClient({
+    account,
+    chain,
+    bundlerTransport: rpc,
+    paymaster: paymasterClient,
+  });
+}
+
+// Submit → wait → check-success → decode-revert-on-failure, the same
+// sequence subscribeAndFund below runs inline. Kept as a separate helper
+// rather than refactoring subscribeAndFund to share it — that function is
+// proven live against real Sepolia money movement (see frontend/plan.md's
+// F4 error trail) and isn't worth touching to save a few lines.
+async function sendSponsoredUserOp(calls: { to: `0x${string}`; data: `0x${string}`; value?: bigint }[]) {
+  const kernelClient = await buildOwnerKernelClient();
+
+  let userOpHash: `0x${string}`;
+  try {
+    userOpHash = await kernelClient.sendUserOperation({ calls });
+  } catch (e) {
+    console.error('sendSponsoredUserOp: sendUserOperation rejected', e);
+    throw e;
+  }
+  const userOpReceipt = await kernelClient.waitForUserOperationReceipt({ hash: userOpHash });
+
+  if (!userOpReceipt.success) {
+    const reason = userOpReceipt.reason ? decodeRevertData(userOpReceipt.reason) : 'no reason given';
+    throw new Error(reason);
+  }
+  return userOpReceipt;
+}
+
 // Batches subscribe(planId) + (approve(vault, shortfall) + deposit(USDC,
 // shortfall) — only if the vault doesn't already cover it) into one
 // gas-sponsored UserOperation. `fundingAmount` is the TARGET vault balance
@@ -249,4 +323,109 @@ export async function subscribeAndFund(
   const receipt = await buildTxReceipt(userOpReceipt.receipt, vaultAddress, shortfall);
 
   return { subId: Number(event.args.subId), receipt };
+}
+
+// Everything below was a plain-EOA write in lib/wallet.ts until the gasless-
+// writes pass — moved here (not left in wallet.ts calling into this file)
+// because this file is the only one allowed to import @zerodev/sdk.
+// Signatures and behavior are unchanged from the originals; only the
+// submission path is different (sendSponsoredUserOp instead of
+// writeContractSafely). `address`/`from` params are kept for call-site
+// compatibility even though the signer now resolves internally via
+// getSigner() inside buildOwnerKernelClient — they were always "who signs
+// this," which is no longer the caller's job to specify.
+
+export async function unsubscribe(address: string, subId: number): Promise<void> {
+  const registryAddress = getRegistryAddress();
+  await sendSponsoredUserOp([
+    {
+      to: registryAddress,
+      data: encodeFunctionData({ abi: registryAbi, functionName: 'unsubscribe', args: [BigInt(subId)] }),
+    },
+  ]);
+}
+
+// Approve only if the current allowance is short, then deposit — both calls
+// batch into the same UserOp when both are needed, so this is at most one
+// signature regardless (was up to two separate plain txs before).
+export async function approveAndDeposit(address: string, amount: bigint): Promise<TxReceipt> {
+  const usdc = getUsdcAddress();
+  const vault = getVaultAddress();
+  const account = address as `0x${string}`;
+
+  const allowance = await getPublicClient().readContract({
+    address: usdc,
+    abi: usdcAbi,
+    functionName: 'allowance',
+    args: [account, vault],
+  });
+
+  const calls = [
+    ...(allowance < amount
+      ? [
+          {
+            to: usdc,
+            data: encodeFunctionData({ abi: usdcAbi, functionName: 'approve', args: [vault, amount] }),
+          },
+        ]
+      : []),
+    {
+      to: vault,
+      data: encodeFunctionData({ abi: vaultAbi, functionName: 'deposit', args: [usdc, amount] }),
+    },
+  ];
+
+  const userOpReceipt = await sendSponsoredUserOp(calls);
+  return buildTxReceipt(userOpReceipt.receipt, vault, amount);
+}
+
+export async function withdraw(address: string, amount: bigint): Promise<TxReceipt> {
+  const vault = getVaultAddress();
+  const usdc = getUsdcAddress();
+  const userOpReceipt = await sendSponsoredUserOp([
+    {
+      to: vault,
+      data: encodeFunctionData({ abi: vaultAbi, functionName: 'withdraw', args: [usdc, amount] }),
+    },
+  ]);
+  return buildTxReceipt(userOpReceipt.receipt, address, amount);
+}
+
+// The one action in the app that moves money OUT of Recurra's world
+// entirely — a plain ERC-20 transfer from the user's own wallet to any
+// address they type. F4.5's security rules, all enforced here at the
+// boundary, not just in the UI:
+// - destination must be a well-formed address (checksummed via
+//   getAddress) BEFORE anything is signed — a typo must fail loudly,
+//   never become unrecoverable
+// - explicit zero-address block, belt-and-suspenders over the token's own
+// - same simulate-then-write-then-check-receipt discipline as every other
+//   write (sendSponsoredUserOp's success check plays that role here)
+//
+// PERMANENT SECURITY BOUNDARY (from frontend/plan.md F4.5): Send must NEVER
+// be delegated to a session key. The session key's model is a fixed
+// allowlist of known contracts; "send to whatever the user typed" is
+// fundamentally incompatible with an allowlist. This function goes through
+// buildOwnerKernelClient — sudo (full owner) only, no session key, ever —
+// so gas sponsorship changes who pays, never who authorizes. Not a UX
+// preference; do not revisit.
+export async function transferUsdc(from: string, to: string, amount: bigint): Promise<TxReceipt> {
+  if (!isAddress(to)) {
+    throw new Error("That doesn't look like a valid address — check it and try again.");
+  }
+  const destination = getAddress(to); // checksummed, canonical
+  if (destination === zeroAddress) {
+    throw new Error('That is the zero address — funds sent there are gone forever.');
+  }
+  if (amount <= 0n) {
+    throw new Error('Enter an amount greater than zero.');
+  }
+  const usdc = getUsdcAddress();
+  const userOpReceipt = await sendSponsoredUserOp([
+    {
+      to: usdc,
+      data: encodeFunctionData({ abi: usdcAbi, functionName: 'transfer', args: [destination, amount] }),
+    },
+  ]);
+  return buildTxReceipt(userOpReceipt.receipt, destination, amount);
 }

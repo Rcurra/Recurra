@@ -17,12 +17,17 @@
   --glass-blur: 20px;
   --glass-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 
-  /* text — white, stepped down by opacity only. Raised 2026-07-13 after
-     a live readability review ("reading the text is stressful"): muted
-     0.6 -> 0.72, faint 0.38 -> 0.5. Hierarchy survives, eyes don't. */
+  /* text — white, stepped down by opacity only. Raised twice now: first
+     2026-07-13 (0.6 -> 0.72 / 0.38 -> 0.5), still not enough per live
+     feedback — raised again 2026-07-17 to 0.82 / 0.65. That's ~13:1 and
+     ~8.6:1 against pure black respectively (WCAG AAA is 7:1 for normal
+     text), with real headroom this time instead of a token bump that
+     barely clears AA on the smallest labels (9-11px uppercase, wide
+     tracking) most of this app actually uses these tokens for. Hierarchy
+     survives, eyes don't. */
   --ink: #ffffff;
-  --ink-muted: rgba(255, 255, 255, 0.72);
-  --ink-faint: rgba(255, 255, 255, 0.5);
+  --ink-muted: rgba(255, 255, 255, 0.82);
+  --ink-faint: rgba(255, 255, 255, 0.65);
 
   /* legacy slot names, remapped to monochrome so every existing
      component lands on the new palette without a per-file sweep.

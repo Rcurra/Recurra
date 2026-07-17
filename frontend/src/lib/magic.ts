@@ -4,7 +4,9 @@
 //
 // Two paths, chosen by NEXT_PUBLIC_DEV_WALLET:
 // - dev-wallet ('1'): signs with a local anvil key, no Magic quota spent.
-//   loginWithEmail ignores the email entirely.
+//   loginWithEmail ignores the email for auth (always the same fixed key) —
+//   it's only kept as a display label, so a tester juggling several "test
+//   accounts" in dev mode has something to tell them apart by.
 // - real Magic: email-OTP via Magic's own hosted UI (magic.auth.loginWithEmailOTP),
 //   wrapped as an EIP-1193 provider → viem WalletClient. Lazy: the Magic
 //   client is only constructed on this path, so the placeholder
@@ -22,7 +24,14 @@ import { privateKeyToAccount, type LocalAccount } from 'viem/accounts';
 import { getChain } from './chain';
 
 const STORAGE_KEY = 'recurra_address';
+// Display-only — never used for auth decisions, Magic's own session is the
+// source of truth for that. Lets Settings/the login screen show WHICH
+// account is active instead of a cryptic truncated address, the real ask
+// behind "I've used more than one email testing and can't tell them apart."
+const STORAGE_KEY_EMAIL = 'recurra_email';
 const isDevWallet = process.env.NEXT_PUBLIC_DEV_WALLET === '1';
+
+export type Session = { address: string; email: string | null };
 
 let walletClient: WalletClient | null = null;
 let magicInstance: Magic | null = null;
@@ -44,7 +53,11 @@ function getMagic(): Magic {
   return magicInstance;
 }
 
-async function loginDev(): Promise<string> {
+// Dev mode's account is always the same fixed anvil key regardless of what's
+// typed — but the email typed at login is still worth remembering as a
+// label, purely so a tester juggling several "accounts" in dev mode has
+// something on screen to tell them apart by. Never affects which key signs.
+async function loginDev(email: string): Promise<Session> {
   const key = process.env.NEXT_PUBLIC_DEV_PRIVATE_KEY as `0x${string}` | undefined;
   if (!key) {
     throw new Error('NEXT_PUBLIC_DEV_PRIVATE_KEY is not set — see .env.local.example');
@@ -52,33 +65,38 @@ async function loginDev(): Promise<string> {
   const account = privateKeyToAccount(key);
   walletClient = createWalletClient({ account, chain: getChain(), transport: http() });
   localStorage.setItem(STORAGE_KEY, account.address);
-  return account.address;
+  localStorage.setItem(STORAGE_KEY_EMAIL, email);
+  return { address: account.address, email };
 }
 
 // The EOA address lives at wallets.ethereum.publicAddress in this SDK
 // version, not top-level (verified against the installed types — an
 // earlier version of this file assumed a flat `publicAddress`, which
-// doesn't typecheck against what's actually installed).
-async function getMagicAddress(magic: Magic): Promise<string | null> {
-  const { wallets } = await magic.user.getInfo();
-  return wallets.ethereum?.publicAddress ?? null;
+// doesn't typecheck against what's actually installed). `email` comes from
+// the same call — Magic's own verified record, not whatever was typed into
+// the form, so it's trustworthy to display even on session restore.
+async function getMagicSession(magic: Magic): Promise<Session | null> {
+  const { email, wallets } = await magic.user.getInfo();
+  const address = wallets.ethereum?.publicAddress;
+  return address ? { address, email: email ?? null } : null;
 }
 
-async function loginMagic(email: string): Promise<string> {
+async function loginMagic(email: string): Promise<Session> {
   const magic = getMagic();
   await magic.auth.loginWithEmailOTP({ email }); // Magic's own hosted UI handles the OTP code
   walletClient = createWalletClient({ chain: getChain(), transport: custom(magic.rpcProvider) });
-  const address = await getMagicAddress(magic);
-  if (!address) throw new Error('Magic login succeeded but returned no address');
-  localStorage.setItem(STORAGE_KEY, address);
-  return address;
+  const session = await getMagicSession(magic);
+  if (!session) throw new Error('Magic login succeeded but returned no address');
+  localStorage.setItem(STORAGE_KEY, session.address);
+  if (session.email) localStorage.setItem(STORAGE_KEY_EMAIL, session.email);
+  return session;
 }
 
-export async function loginWithEmail(email: string): Promise<string> {
-  return isDevWallet ? loginDev() : loginMagic(email);
+export async function loginWithEmail(email: string): Promise<Session> {
+  return isDevWallet ? loginDev(email) : loginMagic(email);
 }
 
-export async function restoreSession(): Promise<string | null> {
+export async function restoreSession(): Promise<Session | null> {
   if (isDevWallet) {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return null;
@@ -87,19 +105,23 @@ export async function restoreSession(): Promise<string | null> {
       const account = privateKeyToAccount(key);
       walletClient = createWalletClient({ account, chain: getChain(), transport: http() });
     }
-    return stored;
+    return { address: stored, email: localStorage.getItem(STORAGE_KEY_EMAIL) };
   }
 
   const magic = getMagic();
   const loggedIn = await magic.user.isLoggedIn();
   if (!loggedIn) {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY_EMAIL);
     return null;
   }
   walletClient = createWalletClient({ chain: getChain(), transport: custom(magic.rpcProvider) });
-  const address = await getMagicAddress(magic);
-  if (address) localStorage.setItem(STORAGE_KEY, address);
-  return address;
+  const session = await getMagicSession(magic);
+  if (session) {
+    localStorage.setItem(STORAGE_KEY, session.address);
+    if (session.email) localStorage.setItem(STORAGE_KEY_EMAIL, session.email);
+  }
+  return session;
 }
 
 export async function logout(): Promise<void> {
@@ -108,6 +130,7 @@ export async function logout(): Promise<void> {
   }
   walletClient = null;
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_KEY_EMAIL);
 }
 
 // Unused until F3's signer abstraction / F4's Kernel account, but part of

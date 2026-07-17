@@ -7,7 +7,7 @@ import { shortAddress } from '@/lib/format';
 import { MOCK_PERMISSIONS } from '@/lib/mockData';
 
 export default function SettingsPage() {
-  const { address, logout } = useAuth();
+  const { address, email, logout } = useAuth();
   const router = useRouter();
 
   return (
@@ -18,8 +18,8 @@ export default function SettingsPage() {
       </p>
       <GlassCard hairline className="mb-10 flex flex-wrap items-center justify-between gap-4 p-6" style={{ animation: 'fadeUp 0.7s ease both 0.08s' }}>
         <div>
-          <p className="numeric text-sm text-ink">{address ? shortAddress(address) : '—'}</p>
-          <p className="mt-1 text-xs text-ink-muted">signed in with your email — no seed phrase, ever</p>
+          <p className="text-sm text-ink">{email ?? 'signed in — no seed phrase, ever'}</p>
+          <p className="numeric mt-1 text-xs text-ink-muted">{address ? shortAddress(address) : '—'}</p>
         </div>
         <button
           onClick={async () => {

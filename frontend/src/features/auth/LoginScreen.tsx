@@ -40,7 +40,7 @@ export function LoginScreen() {
   // error about a login that worked, on a screen it didn't belong to.
   const [loginError, setLoginError] = useState<string | null>(null);
   const [signOutError, setSignOutError] = useState<string | null>(null);
-  const { login, logout, status, address } = useAuth();
+  const { login, logout, status, address, email: sessionEmail } = useAuth();
   const router = useRouter();
 
   async function handleLogin() {
@@ -143,7 +143,13 @@ export function LoginScreen() {
                 <p className="mt-3 text-[12px] font-light leading-relaxed tracking-[0.04em] text-ink-muted">
                   You&rsquo;re already signed in as
                   <br />
-                  <span className="numeric text-ink">{`${address.slice(0, 6)}…${address.slice(-4)}`}</span>
+                  <span className="text-ink">{sessionEmail ?? `${address.slice(0, 6)}…${address.slice(-4)}`}</span>
+                  {sessionEmail && (
+                    <>
+                      <br />
+                      <span className="numeric text-[11px] text-ink-faint">{`${address.slice(0, 6)}…${address.slice(-4)}`}</span>
+                    </>
+                  )}
                 </p>
               ) : (
                 <p className="mt-3 text-[12px] font-light leading-relaxed tracking-[0.04em] text-ink-muted">

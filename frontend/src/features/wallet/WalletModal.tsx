@@ -7,7 +7,8 @@ import { InlineError } from '@/components/InlineError';
 import { LoadingLine } from '@/components/LoadingLine';
 import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { formatUSDC, parseUSDC } from '@/lib/format';
-import { getUsdcBalance, transferUsdc, walletErrorMessage, type TxReceipt } from '@/lib/wallet';
+import { transferUsdc } from '@/lib/zerodev';
+import { getUsdcBalance, walletErrorMessage, type TxReceipt } from '@/lib/wallet';
 
 type Phase = 'idle' | 'confirm' | 'sending' | 'done' | 'error';
 

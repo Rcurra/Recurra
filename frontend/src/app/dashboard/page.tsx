@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
-import { OrbitalVault, VaultModal } from '@/features/vault';
+import { VaultHero, VaultModal } from '@/features/vault';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
@@ -23,10 +23,9 @@ import {
 } from '@/lib/format';
 import { getVaultBalance } from '@/lib/wallet';
 
-// Overview — the vault is a star system and it IS the page: balance at
-// the center like a sun, every active subscription an orbit whose moon's
-// position is real contract state (nextPaymentDue). The subscriptions
-// table below is the flat-list view of the same truth.
+// Overview — the vault hero up top (balance, runway, the two permanent
+// actions), the Subscriptions list right below it as the one real "see
+// everything" surface (each row wears its own ring, real cycle progress).
 export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
@@ -67,15 +66,21 @@ export default function OverviewPage() {
   }, [address]);
 
   const active = subscriptions.filter((s) => s.active);
-  // monthly commitment across active subs — display math only
-  const monthly = active.reduce((sum, s) => {
+  // Only subs whose plan is still active actually charge — a merchant-retired
+  // plan stops firing on-chain (isDue goes false, the Executor reverts), so
+  // every money projection below must skip those or the runway would lie.
+  // Same `?? true` convention as the Subscriptions page: a plan not yet
+  // loaded reads as charging, no flash of wrong math before plans fetch.
+  const charging = active.filter((s) => plans.get(s.planId)?.active ?? true);
+  // monthly commitment across charging subs — display math only
+  const monthly = charging.reduce((sum, s) => {
     const p = plans.get(s.planId);
     return p ? sum + monthlyEquivalent(p.amount, p.intervalSecs) : sum;
   }, 0n);
-  const nextDue = active.length
-    ? active.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
+  const nextDue = charging.length
+    ? charging.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
     : null;
-  const tableRows = [...active]
+  const tableRows = [...charging]
     .sort((a, b) => a.nextPaymentDue.getTime() - b.nextPaymentDue.getTime())
     .slice(0, 4);
 
@@ -88,7 +93,7 @@ export default function OverviewPage() {
   const underfunded =
     vaultBalance === null
       ? []
-      : active.filter((s) => {
+      : charging.filter((s) => {
           const plan = plans.get(s.planId);
           return plan && isPastDue(s.nextPaymentDue) && vaultBalance < plan.amount;
         });
@@ -97,7 +102,7 @@ export default function OverviewPage() {
   // the ones at risk. Excludes anything already in `underfunded` so a single
   // sub never shows two competing banners at once.
   const underfundedIds = new Set(underfunded.map((s) => s.id));
-  const upcoming = active.filter((s) => {
+  const upcoming = charging.filter((s) => {
     const plan = plans.get(s.planId);
     return plan && !underfundedIds.has(s.id) && isUpcoming(s.nextPaymentDue, plan.intervalSecs);
   });
@@ -158,15 +163,12 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* ── the vault — a star system ───────────────────────── */}
+      {/* ── the vault ─────────────────────────────────────────── */}
       <div style={{ animation: 'fadeUp 0.7s ease both' }}>
-        <OrbitalVault
+        <VaultHero
           balance={vaultBalance}
-          orbiting={tableRows.flatMap((sub) => {
-            const plan = plans.get(sub.planId);
-            return plan ? [{ sub, plan }] : [];
-          })}
-          totalActive={active.length}
+          monthly={monthly}
+          hasActive={active.length > 0}
           onOpenVault={() => setVaultOpen(true)}
         />
       </div>
@@ -178,7 +180,7 @@ export default function OverviewPage() {
       >
         {[
           { label: 'Runway', value: runwayLabel(vaultBalance, monthly) ?? '—' },
-          { label: 'Monthly commitment', value: active.length ? `${formatUSDC(monthly)} USDC` : '—' },
+          { label: 'Monthly commitment', value: charging.length ? `${formatUSDC(monthly)} USDC` : '—' },
           {
             label: 'Next charge',
             value: nextDue

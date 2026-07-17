@@ -10,7 +10,8 @@ import { useAuth } from '@/features/auth';
 import type { Plan, Subscription } from '@/types';
 import { cycleProgress, formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
 import { getSubscriptionReceipts, type SubscriptionReceipt } from '@/lib/receipts';
-import { unsubscribe, walletErrorMessage } from '@/lib/wallet';
+import { unsubscribe } from '@/lib/zerodev';
+import { walletErrorMessage } from '@/lib/wallet';
 
 const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
   subscribed: 'subscribed',
@@ -19,13 +20,18 @@ const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
 };
 
 // The live countdown — real chain state, not decoration. Ticks every
-// second toward nextPaymentDue.
-function useCountdown(target: Date) {
+// second toward nextPaymentDue. `enabled` gates the ticking itself, not
+// just whether the text is shown — a cancelled or plan-retired subscription
+// has no upcoming charge to count toward (a retired plan stops charging
+// on-chain entirely), so ticking would be counting down to nothing.
+// Frozen at whatever `now` was on mount instead.
+function useCountdown(target: Date, enabled: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [enabled]);
 
   const ms = target.getTime() - now;
   if (ms <= 0) return { due: true, text: 'due now' };
@@ -89,8 +95,15 @@ function SubDetailContent({
   onClose: () => void;
   onCancelled?: () => void;
 }) {
-  const countdown = useCountdown(sub.nextPaymentDue);
   const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+  // Derived, not passed in — this modal is opened from several places
+  // (Subscriptions' three tabs, Discover's "yours" rows) and shouldn't need
+  // every caller to compute and thread this through. Same meaning as
+  // SubscriptionCard's `unavailable`: still active on-chain, but the
+  // merchant retired the plan, which stops charging entirely (isDue goes
+  // false; the Executor refuses the charge).
+  const unavailable = sub.active && plan !== null && !plan.active;
+  const countdown = useCountdown(sub.nextPaymentDue, sub.active && !unavailable);
   const { address } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -140,7 +153,7 @@ function SubDetailContent({
     { label: 'Merchant', value: plan ? shortAddress(plan.merchant) : '—' },
     { label: 'Plan', value: `#${sub.planId}` },
     { label: 'Max exposure', value: plan ? `${formatUSDC(plan.amount)} USDC / cycle` : '—' },
-    { label: 'Status', value: sub.active ? 'Active' : 'Cancelled' },
+    { label: 'Status', value: sub.active ? (unavailable ? 'Active — plan unavailable' : 'Active') : 'Cancelled' },
   ];
 
   // Portaled to <body>, fixed backdrop — this was the last modal in the
@@ -178,18 +191,21 @@ function SubDetailContent({
             </span>
           </p>
           <p className="mt-1.5 text-[11px] font-light text-ink-muted">
-            {sub.active ? (
-              <>
-                next charge <span className="numeric text-ink">{countdown.text}</span>
-              </>
-            ) : (
-              'no more charges — history kept below'
-            )}
+            {!sub.active
+              ? 'no more charges — history kept below'
+              : unavailable
+                ? 'the merchant retired this plan — no more charges will be taken; your escrow stays yours'
+                : (
+                    <>
+                      next charge <span className="numeric text-ink">{countdown.text}</span>
+                    </>
+                  )}
           </p>
 
           {/* the cycle, drawn as a line — the one animated element left,
-              and it only ever moves with real progress */}
-          {sub.active && (
+              and it only ever moves with real progress. Hidden for
+              plan-retired subs: there is no cycle in motion to draw. */}
+          {sub.active && !unavailable && (
             <div className="mt-4">
               <div className="relative h-px w-full bg-line">
                 <div
