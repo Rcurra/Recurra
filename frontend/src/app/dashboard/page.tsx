@@ -66,15 +66,21 @@ export default function OverviewPage() {
   }, [address]);
 
   const active = subscriptions.filter((s) => s.active);
-  // monthly commitment across active subs — display math only
-  const monthly = active.reduce((sum, s) => {
+  // Only subs whose plan is still active actually charge — a merchant-retired
+  // plan stops firing on-chain (isDue goes false, the Executor reverts), so
+  // every money projection below must skip those or the runway would lie.
+  // Same `?? true` convention as the Subscriptions page: a plan not yet
+  // loaded reads as charging, no flash of wrong math before plans fetch.
+  const charging = active.filter((s) => plans.get(s.planId)?.active ?? true);
+  // monthly commitment across charging subs — display math only
+  const monthly = charging.reduce((sum, s) => {
     const p = plans.get(s.planId);
     return p ? sum + monthlyEquivalent(p.amount, p.intervalSecs) : sum;
   }, 0n);
-  const nextDue = active.length
-    ? active.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
+  const nextDue = charging.length
+    ? charging.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
     : null;
-  const tableRows = [...active]
+  const tableRows = [...charging]
     .sort((a, b) => a.nextPaymentDue.getTime() - b.nextPaymentDue.getTime())
     .slice(0, 4);
 
@@ -87,7 +93,7 @@ export default function OverviewPage() {
   const underfunded =
     vaultBalance === null
       ? []
-      : active.filter((s) => {
+      : charging.filter((s) => {
           const plan = plans.get(s.planId);
           return plan && isPastDue(s.nextPaymentDue) && vaultBalance < plan.amount;
         });
@@ -96,7 +102,7 @@ export default function OverviewPage() {
   // the ones at risk. Excludes anything already in `underfunded` so a single
   // sub never shows two competing banners at once.
   const underfundedIds = new Set(underfunded.map((s) => s.id));
-  const upcoming = active.filter((s) => {
+  const upcoming = charging.filter((s) => {
     const plan = plans.get(s.planId);
     return plan && !underfundedIds.has(s.id) && isUpcoming(s.nextPaymentDue, plan.intervalSecs);
   });
@@ -174,7 +180,7 @@ export default function OverviewPage() {
       >
         {[
           { label: 'Runway', value: runwayLabel(vaultBalance, monthly) ?? '—' },
-          { label: 'Monthly commitment', value: active.length ? `${formatUSDC(monthly)} USDC` : '—' },
+          { label: 'Monthly commitment', value: charging.length ? `${formatUSDC(monthly)} USDC` : '—' },
           {
             label: 'Next charge',
             value: nextDue

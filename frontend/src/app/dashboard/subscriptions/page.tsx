@@ -83,10 +83,12 @@ function SubscriptionsView() {
   // subscription, just active (renews every cycle) and cancelled
   // (unsubscribe()'d). `unavailable` isn't a third on-chain state: it's a
   // still-active subscription whose PLAN the merchant has since
-  // deactivated (Plan.active === false). Split out from `active` so that
-  // tab means strictly "renewing normally" — a subscriber's own charges
-  // are completely unaffected by their plan going unavailable, only new
-  // subscribe() calls are blocked, so this must never read as "at risk."
+  // deactivated (Plan.active === false). Deactivation stops charging
+  // on-chain — isDue() goes false and the Executor reverts
+  // SubscriptionInactive — so nothing more is ever taken and escrow stays
+  // withdrawable. Split out from `active` so that tab means strictly
+  // "renewing normally"; shown as its own calm state, never as "at risk" —
+  // the subscriber loses nothing.
   // `plan?.active ?? true`: a subscription whose plan hasn't loaded yet
   // reads as normal, not unavailable — no false flash before plans fetch.
   const active = subscriptions.filter((s) => s.active && (plans.get(s.planId)?.active ?? true));

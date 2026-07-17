@@ -7,10 +7,12 @@ import type { Plan, Subscription } from '@/types';
 // visual language for "a subscription" instead of two (Discover used to
 // have its own compact chip strip; this is that fixed). The ring is the
 // face, amount lives inside it. Three footer states, not two: still
-// renewing normally, cancelled (history kept), or `unavailable` — active
-// and renewing exactly the same, but the merchant has since deactivated
-// the plan so no one new can subscribe to it. That third state must never
-// read as "something's wrong with YOUR subscription" — it isn't.
+// renewing normally, cancelled (history kept), or `unavailable` — still
+// active on-chain, but the merchant has retired the plan, and that stops
+// charging entirely (isDue() goes false; the Executor reverts
+// SubscriptionInactive). Nothing more is ever taken and escrow stays
+// withdrawable, so this state must never read as "something's wrong with
+// YOUR subscription" — nothing was lost.
 export function SubscriptionCard({
   sub,
   plan,
@@ -48,12 +50,12 @@ export function SubscriptionCard({
                 style={{ animation: `shellWave ${1.4 + i * 0.5}s ease-out ${i * 0.15}s` }}
               />
             ))}
-          {/* progress stays real either way — charges genuinely continue as
-              normal when unavailable — but the breathing pulse specifically
-              signals "alive, worth watching," which isn't true of a plan
-              that will never change again until you act on it. */}
+          {/* a retired plan never charges again, so drawing cycle progress
+              toward a charge that will never fire would be a lie — the ring
+              sits empty, same as cancelled. Breathing is likewise reserved
+              for subs that are actually renewing. */}
           <CadenceRing
-            progress={sub.active ? progress : 0}
+            progress={sub.active && !unavailable ? progress : 0}
             size={104}
             strokeWidth={3.5}
             breathing={sub.active && !unavailable}
@@ -75,7 +77,7 @@ export function SubscriptionCard({
           {!sub.active ? (
             <p className="text-xs text-ink-faint">cancelled — history kept</p>
           ) : unavailable ? (
-            <p className="text-xs text-ink-faint">plan no longer offered — your charges continue as normal</p>
+            <p className="text-xs text-ink-faint">plan retired by the merchant — no more charges; your escrow stays yours</p>
           ) : (
             <>
               <p className="text-xs text-ink-muted">

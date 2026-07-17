@@ -21,11 +21,10 @@ const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
 
 // The live countdown — real chain state, not decoration. Ticks every
 // second toward nextPaymentDue. `enabled` gates the ticking itself, not
-// just whether the text is shown — an unavailable subscription's charge is
-// real and still coming, but a second-by-second countdown reads as "watch
-// this," which isn't true of something that won't change again until you
-// act on it (same reasoning as the card's ring losing its breathing pulse
-// for this same state). Frozen at whatever `now` was on mount instead.
+// just whether the text is shown — a cancelled or plan-retired subscription
+// has no upcoming charge to count toward (a retired plan stops charging
+// on-chain entirely), so ticking would be counting down to nothing.
+// Frozen at whatever `now` was on mount instead.
 function useCountdown(target: Date, enabled: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -100,8 +99,9 @@ function SubDetailContent({
   // Derived, not passed in — this modal is opened from several places
   // (Subscriptions' three tabs, Discover's "yours" rows) and shouldn't need
   // every caller to compute and thread this through. Same meaning as
-  // SubscriptionCard's `unavailable`: still active and charging normally,
-  // just no longer open to new subscribers.
+  // SubscriptionCard's `unavailable`: still active on-chain, but the
+  // merchant retired the plan, which stops charging entirely (isDue goes
+  // false; the Executor refuses the charge).
   const unavailable = sub.active && plan !== null && !plan.active;
   const countdown = useCountdown(sub.nextPaymentDue, sub.active && !unavailable);
   const { address } = useAuth();
@@ -194,7 +194,7 @@ function SubDetailContent({
             {!sub.active
               ? 'no more charges — history kept below'
               : unavailable
-                ? 'the merchant no longer offers this plan to new subscribers — your charges continue as normal'
+                ? 'the merchant retired this plan — no more charges will be taken; your escrow stays yours'
                 : (
                     <>
                       next charge <span className="numeric text-ink">{countdown.text}</span>
@@ -203,8 +203,9 @@ function SubDetailContent({
           </p>
 
           {/* the cycle, drawn as a line — the one animated element left,
-              and it only ever moves with real progress */}
-          {sub.active && (
+              and it only ever moves with real progress. Hidden for
+              plan-retired subs: there is no cycle in motion to draw. */}
+          {sub.active && !unavailable && (
             <div className="mt-4">
               <div className="relative h-px w-full bg-line">
                 <div
