@@ -10,6 +10,7 @@ import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
 import { LoadingLine } from '@/components/LoadingLine';
+import { useChargeDetection } from '@/hooks/useChargeDetection';
 import {
   cycleProgress,
   formatUSDC,
@@ -34,6 +35,7 @@ export default function OverviewPage() {
   const [balanceNonce, setBalanceNonce] = useState(0);
 
   const { subscriptions, loading, error } = useSubscriptions(address);
+  const { justCharged } = useChargeDetection(subscriptions);
 
   useEffect(() => {
     api.plans
@@ -80,9 +82,18 @@ export default function OverviewPage() {
   const nextDue = charging.length
     ? charging.reduce((a, b) => (a.nextPaymentDue < b.nextPaymentDue ? a : b))
     : null;
-  const tableRows = [...charging]
+  // Top 4 soonest-due — but a charge that just fired advances that sub's
+  // nextPaymentDue a full interval, which usually knocks it straight out
+  // of "soonest 4" in this same recompute. Pin anything still `justCharged`
+  // into the list regardless of rank, or the glow below would have no row
+  // left to animate — the moment it exists to show would already be gone.
+  const soonestFour = [...charging]
     .sort((a, b) => a.nextPaymentDue.getTime() - b.nextPaymentDue.getTime())
     .slice(0, 4);
+  const pinnedCharged = charging.filter(
+    (s) => justCharged.has(s.id) && !soonestFour.some((r) => r.id === s.id),
+  );
+  const tableRows = [...pinnedCharged, ...soonestFour];
 
   // Under-funded warning — sub due but runway zero. Derived entirely from
   // data already on screen: due = nextPaymentDue has passed; can't-cover =
@@ -232,12 +243,17 @@ export default function OverviewPage() {
               {tableRows.map((sub) => {
                 const plan = plans.get(sub.planId);
                 const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+                const charged = justCharged.has(sub.id);
                 return (
                   <li
                     key={sub.id}
-                    className="grid grid-cols-[32px_1fr_1fr_auto] items-center gap-3 rounded-xl border border-line bg-canvas/30 px-1 py-3 transition hover:border-[#282c39] sm:grid-cols-[32px_1fr_1fr_1fr_auto]"
+                    className={`grid grid-cols-[32px_1fr_1fr_auto] items-center gap-3 rounded-xl border px-1 py-3 transition-all duration-700 sm:grid-cols-[32px_1fr_1fr_1fr_auto] ${
+                      charged
+                        ? 'border-mint/60 bg-mint-deep/40 shadow-[0_0_24px_-10px_var(--mint)]'
+                        : 'border-line bg-canvas/30 hover:border-[#282c39]'
+                    }`}
                   >
-                    <CadenceRing progress={progress} size={26} strokeWidth={2} />
+                    <CadenceRing progress={progress} size={26} strokeWidth={2} breathing={charged} />
                     <p className="numeric truncate text-xs text-ink">
                       {plan ? (
                         <>
@@ -252,7 +268,9 @@ export default function OverviewPage() {
                       {plan ? shortAddress(plan.merchant) : '—'}
                     </p>
                     <p className="numeric text-xs text-ink-muted">{timeUntil(sub.nextPaymentDue)}</p>
-                    <span className="rounded-full bg-mint-deep px-2.5 py-0.5 text-[10px] text-mint">Active</span>
+                    <span className="rounded-full bg-mint-deep px-2.5 py-0.5 text-[10px] text-mint">
+                      {charged ? 'Charged' : 'Active'}
+                    </span>
                   </li>
                 );
               })}
