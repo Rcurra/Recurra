@@ -8,8 +8,8 @@ import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { LoadingLine } from '@/components/LoadingLine';
-import { ReceiptListRow } from '@/components/ReceiptListRow';
-import { formatUSDC, shortAddress } from '@/lib/format';
+import { PaymentRow } from '@/components/PaymentRow';
+import { formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
 
 type Filter = 'active' | 'cancelled' | 'unavailable' | 'activity';
 
@@ -213,21 +213,19 @@ function SubscriptionsView() {
           </div>
         ) : (
           <div className="space-y-2" style={{ animation: 'fadeUp 0.7s ease both 0.1s' }}>
-            {paymentsNewestFirst.map((p) => (
-              <ReceiptListRow
-                key={`${p.txHash}-${p.subId}`}
-                title={`charged — sub #${p.subId}`}
-                amount={`${formatUSDC(p.amount)} USDC`}
-                counterparty={p.merchant}
-                receipt={{
-                  hash: p.txHash,
-                  to: p.merchant,
-                  amount: p.amount,
-                  blockNumber: p.blockNumber,
-                  timestamp: p.timestamp,
-                }}
-              />
-            ))}
+            {paymentsNewestFirst.map((p) => {
+              // sub → plan gives the details panel its cadence line; both
+              // lookups degrade to undefined gracefully while loading.
+              const sub = subscriptions.find((s) => s.id === p.subId);
+              const plan = sub ? plans.get(sub.planId) : undefined;
+              return (
+                <PaymentRow
+                  key={`${p.txHash}-${p.subId}`}
+                  payment={p}
+                  cadence={plan ? `every ${intervalLabel(plan.intervalSecs)}` : undefined}
+                />
+              );
+            })}
           </div>
         )
       ) : (
