@@ -30,6 +30,17 @@ const STORAGE_KEY = 'recurra_address';
 // behind "I've used more than one email testing and can't tell them apart."
 const STORAGE_KEY_EMAIL = 'recurra_email';
 const isDevWallet = process.env.NEXT_PUBLIC_DEV_WALLET === '1';
+// Dev-wallet mode signs EVERYONE in with the same well-known anvil key —
+// fine on a laptop, catastrophic in a deployed build (every visitor would
+// share one wallet, and its funds). A production build refuses the flag at
+// module load rather than quietly falling back to Magic: NEXT_PUBLIC_* is
+// inlined at build time, so this makes `next build` itself fail loudly on
+// the misconfiguration instead of shipping it.
+if (isDevWallet && process.env.NODE_ENV === 'production') {
+  throw new Error(
+    'NEXT_PUBLIC_DEV_WALLET=1 in a production build — the shared dev key must never ship. Unset it and rebuild.',
+  );
+}
 
 export type Session = { address: string; email: string | null };
 
