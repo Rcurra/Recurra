@@ -10,7 +10,7 @@ import type { Plan } from '@/types';
 import { LoadingLine } from '@/components/LoadingLine';
 import { PaymentRow } from '@/components/PaymentRow';
 import { useChargeDetection } from '@/hooks/useChargeDetection';
-import { formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
+import { intervalLabel } from '@/lib/format';
 
 type Filter = 'active' | 'cancelled' | 'unavailable' | 'activity';
 
@@ -64,7 +64,7 @@ function SubscriptionsView() {
   }, [address]);
 
   const { subscriptions, loading, error, refetch } = useSubscriptions(address);
-  const { justCharged, chargeEvents: chargeToasts } = useChargeDetection(subscriptions);
+  const { justCharged } = useChargeDetection(subscriptions);
 
   useEffect(() => {
     api.plans
@@ -103,27 +103,10 @@ function SubscriptionsView() {
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
-      {/* ── the pulse, given a body: a charge just fired ────────── */}
-      {chargeToasts.length > 0 && (
-        <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-2">
-          {chargeToasts.map((t) => {
-            const plan = plans.get(t.sub.planId);
-            return (
-              <div
-                key={t.id}
-                className="flex items-center gap-3 rounded-xl border border-mint/40 bg-surface/90 px-4 py-3 shadow-[0_0_20px_-8px_var(--mint)] backdrop-blur-xl"
-                style={{ animation: 'fadeUp 0.35s ease both' }}
-              >
-                <span className="h-2 w-2 shrink-0 rounded-full bg-mint" style={{ boxShadow: '0 0 8px var(--mint)' }} />
-                <p className="numeric text-xs text-ink">
-                  Charged {plan ? `${formatUSDC(plan.amount)} USDC` : 'a payment'}
-                  {plan && <span className="text-ink-muted"> → {shortAddress(plan.merchant)}</span>}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* the charge toast is now app-wide (dashboard/layout.tsx, Option A
+          of the Overview charge-moment work) — rendering it here too would
+          double it up while this tab is open. The card's own glow
+          (justCharged, below) stays page-local. */}
 
       {/* header row: state filters + Activity — the real F5 surface now,
           fed by GET /payments (PaymentExecuted history via the backend),
