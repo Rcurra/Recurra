@@ -1,4 +1,5 @@
 import type { Plan, Subscription } from '@/types';
+import { getUsdcAddress } from '@/lib/contracts';
 
 // The ONLY file that talks to the backend. Two jobs:
 // 1. GET-only, structurally: the API is a read-only index layer (M0) —
@@ -51,6 +52,15 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// createPlan() is permissionless on-chain and takes any ERC-20 — but this
+// app prices every plan through formatUSDC's 6-decimal assumption and only
+// ever funds vaults in USDC. A plan in any other token would render as a
+// false "N USDC" (a merchant could list a junk 18-decimal token priced to
+// look cheap), so non-USDC plans are dropped here at the boundary, once,
+// rather than trusted-but-mislabeled on every page. Case-insensitive:
+// the backend checksums addresses; the env var may not be.
+const isUsdcPlan = (w: PlanWire): boolean => w.token.toLowerCase() === getUsdcAddress().toLowerCase();
+
 const toPlan = (w: PlanWire): Plan => ({
   id: w.id,
   merchant: w.merchant,
@@ -71,14 +81,22 @@ const toSubscription = (w: SubscriptionWire): Subscription => ({
 
 export const api = {
   plans: {
-    list: async (): Promise<Plan[]> => (await get<PlanWire[]>('/plans')).map(toPlan),
-    get: async (id: number): Promise<Plan> => toPlan(await get<PlanWire>(`/plans/${id}`)),
+    list: async (): Promise<Plan[]> =>
+      (await get<PlanWire[]>('/plans')).filter(isUsdcPlan).map(toPlan),
+    // Same boundary as list(): a non-USDC plan is "not found" to this app,
+    // not a plan we'd display with the wrong currency label.
+    get: async (id: number): Promise<Plan> => {
+      const wire = await get<PlanWire>(`/plans/${id}`);
+      if (!isUsdcPlan(wire)) throw new ApiError(404, `plan ${id} is not a USDC plan`);
+      return toPlan(wire);
+    },
   },
   subscriptions: {
-    // `subscriber` filters server-side (the cheap per-subscriber path);
-    // omitting it walks every subscription — dashboard should always pass it.
-    list: async (subscriber?: string): Promise<Subscription[]> => {
-      const query = subscriber ? `?subscriber=${encodeURIComponent(subscriber)}` : '';
+    // `subscriber` is required — it filters server-side (O(k) in the
+    // caller's own subs), and the backend 400s the unfiltered form now:
+    // walking every subscription ever issued was O(n) RPC work nobody used.
+    list: async (subscriber: string): Promise<Subscription[]> => {
+      const query = `?subscriber=${encodeURIComponent(subscriber)}`;
       return (await get<SubscriptionWire[]>(`/subscriptions${query}`)).map(toSubscription);
     },
     get: async (id: number): Promise<Subscription> =>

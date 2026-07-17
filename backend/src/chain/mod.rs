@@ -8,8 +8,8 @@
 pub mod bindings;
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::EthereumWallet;
@@ -51,9 +51,19 @@ pub struct AppState {
     /// boot. See the signer check in `AppState::new`. The read-only API boots
     /// either way; only `main.rs`'s scheduler spawn gates on this.
     pub scheduler_enabled: bool,
+    /// Short-TTL cache for `fetch_payments`, keyed by the subscriber filter.
+    /// Every request used to rerun the full deploy-block-to-tip log scan, so
+    /// a dashboard poll (or a bare curl loop) multiplied into unbounded RPC
+    /// work against the archive endpoint. `Arc` so clones of `AppState` share
+    /// one cache; std `Mutex` since it's never held across an await.
+    payments_cache: Arc<Mutex<PaymentsCache>>,
     /// Raw config, kept for the scheduler interval, vault address, etc.
     pub cfg: Config,
 }
+
+/// One `fetch_payments` result per subscriber filter, tagged with when it
+/// was scanned so `CACHE_TTL` can age it out.
+type PaymentsCache = HashMap<Option<Address>, (Instant, Vec<Payment>)>;
 
 /// Result of comparing the configured signer against on-chain
 /// `authorizedExecutor` — pulled out of `AppState::new` as a pure function so
@@ -246,6 +256,7 @@ impl AppState {
             chain_id,
             sender,
             scheduler_enabled,
+            payments_cache: Arc::new(Mutex::new(HashMap::new())),
             cfg,
         })
     }
@@ -267,36 +278,6 @@ impl AppState {
             s.nextPaymentDue,
             s.active,
         )))
-    }
-
-    /// Read every subscription the registry has ever issued.
-    ///
-    /// Subscription ids are dense and start at 1, so we read `nextSubId()` and
-    /// walk `1..nextSubId`. Zeroed slots (shouldn't happen, but cheap to guard)
-    /// are skipped. This is O(n) RPC calls; fine for a testnet/hackathon scale,
-    /// and the natural replacement later is an event scan. Used by the unfiltered
-    /// `GET /subscriptions`; the dashboard's per-subscriber view uses the far
-    /// cheaper `fetch_subscriptions_for` instead.
-    pub async fn fetch_all_subscriptions(&self) -> Result<Vec<Subscription>, AppError> {
-        let registry = SubscriptionRegistry::new(self.registry, &self.provider);
-
-        let next_sub_id: u64 = registry.nextSubId().call().await?.try_into().unwrap_or(0);
-
-        let mut subs = Vec::new();
-        for id in 1..next_sub_id {
-            let s = registry.subscriptions(U256::from(id)).call().await?;
-            if s.subscriber == Address::ZERO {
-                continue;
-            }
-            subs.push(map_subscription(
-                id,
-                s.planId,
-                s.subscriber,
-                s.nextPaymentDue,
-                s.active,
-            ));
-        }
-        Ok(subs)
     }
 
     /// Read just one subscriber's subscriptions (active and cancelled — the list
@@ -418,9 +399,21 @@ impl AppState {
         &self,
         subscriber: Option<Address>,
     ) -> Result<Vec<Payment>, AppError> {
+        const CACHE_TTL: Duration = Duration::from_secs(30);
+
         let Some(executor) = self.executor else {
             return Ok(Vec::new());
         };
+
+        // Fresh-enough answer already in hand? 30s sits well under how often
+        // anyone needs payment history to move, and turns the frontend's
+        // polling (plus any hostile curl loop) into one scan per window
+        // instead of one per request.
+        if let Some((at, cached)) = self.payments_cache.lock().unwrap().get(&subscriber)
+            && at.elapsed() < CACHE_TTL
+        {
+            return Ok(cached.clone());
+        }
 
         let logs_provider: DynProvider = if self.chain_id == 421_614 {
             let url: reqwest::Url = "https://sepolia-rollup.arbitrum.io/rpc"
@@ -503,6 +496,10 @@ impl AppState {
         }
 
         payments.sort_by_key(|p| p.block_number);
+        self.payments_cache
+            .lock()
+            .unwrap()
+            .insert(subscriber, (Instant::now(), payments.clone()));
         Ok(payments)
     }
 

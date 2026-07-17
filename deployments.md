@@ -63,3 +63,29 @@ Swapping to these is a deliberate cutover (loses the current anvil dev state,
 and the backend's real Openfort signer needs to be live first — `LOCAL_SIGNER_PRIVATE_KEY`
 can't reach a public testnet's `authorizedExecutor` safely for a real demo)
 — not done as part of this deploy.
+
+## Security ops (from the 2026-07-17 audit — dashboard/key work, not code)
+
+**Paymaster quota is a public attack surface (M-2).** The ZeroDev project ID
+ships in the client bundle by design (`NEXT_PUBLIC_ZERODEV_RPC`), so anyone
+can build their own Kernel account against our bundler/paymaster and burn
+sponsored gas — including free USDC transfers, since the app's own Send
+requires sponsoring calls to the USDC contract. Mitigation lives in the
+ZeroDev dashboard, not code: set gas policies (contract allowlist =
+Registry + Vault + USDC, per-account rate limits, project spend cap), and
+treat quota exhaustion during the demo window as an expected failure mode —
+sponsored writes degrade, reads and the scheduler don't.
+
+**One EOA currently holds every privileged role (M-4).** The deployer key
+`0x3d58...e034` is owner of all three contracts (so it controls
+`setAuthorizedExecutor` and the one-time `setExecutor` wiring) *and* is the
+`authorizedExecutor` itself. Compromise of that single key = executor
+rotation + firing any due payment (bounded by design, but perpetual
+griefing). Before demo day:
+
+1. Rotate `authorizedExecutor` to the Openfort TEE wallet via
+   `PaymentExecutor.setAuthorizedExecutor` (already planned above — no
+   redeploy needed).
+2. Move contract ownership to a separate key that never touches a server.
+   Future deploys get `Ownable2Step` (two-step transfer, fat-finger-proof);
+   the live Sepolia contracts predate it, so transfer carefully there.

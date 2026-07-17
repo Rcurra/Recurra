@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {SubscriptionRegistry} from "./SubscriptionRegistry.sol";
 import {SubscriptionVault} from "./SubscriptionVault.sol";
 
@@ -14,7 +15,10 @@ import {SubscriptionVault} from "./SubscriptionVault.sol";
 /// the operational trigger (rotatable). Holds no funds, stores no business
 /// state. Session keys never touch this contract — they live at the ZeroDev
 /// account layer (M0 decision; the old registerSessionKey idea is dead).
-contract PaymentExecutor is Ownable {
+// Ownable2Step, not plain Ownable: losing ownership to a typo'd address
+// would permanently freeze authorizedExecutor rotation — the one owner
+// power that must survive. Two-step transfer makes that unlosable.
+contract PaymentExecutor is Ownable2Step {
     SubscriptionRegistry public immutable registry;
     SubscriptionVault public immutable vault;
 

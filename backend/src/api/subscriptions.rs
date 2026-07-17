@@ -17,26 +17,26 @@ pub struct ListQuery {
     pub subscriber: Option<String>,
 }
 
-/// `GET /subscriptions` — list subscriptions from the registry.
+/// `GET /subscriptions` — list one subscriber's subscriptions.
 ///
-/// With no query params this returns every subscription (walks all ids). With
-/// `?subscriber=0x...` — what the dashboard uses — it asks the registry for that
-/// address's id set directly, so the common path doesn't scan the whole registry.
+/// `?subscriber=0x...` is required. The registry hands back that address's
+/// exact id set in one call, so this stays O(k) in the caller's own subs.
+/// The old unfiltered form walked every id ever issued — O(n) RPC calls
+/// anyone could trigger with a bare curl — and no caller ever used it (the
+/// dashboard always passes the filter), so it's a 400 now, not a slow
+/// surprise.
 pub async fn list(
     State(state): State<AppState>,
     Query(query): Query<ListQuery>,
 ) -> Result<Json<Vec<Subscription>>, AppError> {
-    let subs = match query.subscriber {
-        Some(raw) => {
-            let subscriber = raw
-                .parse::<Address>()
-                .map_err(|_| AppError::BadRequest(format!("invalid subscriber address: {raw}")))?;
-            state.fetch_subscriptions_for(subscriber).await?
-        }
-        None => state.fetch_all_subscriptions().await?,
-    };
+    let raw = query.subscriber.ok_or_else(|| {
+        AppError::BadRequest("subscriber query parameter is required (?subscriber=0x...)".into())
+    })?;
+    let subscriber = raw
+        .parse::<Address>()
+        .map_err(|_| AppError::BadRequest(format!("invalid subscriber address: {raw}")))?;
 
-    Ok(Json(subs))
+    Ok(Json(state.fetch_subscriptions_for(subscriber).await?))
 }
 
 /// `GET /subscriptions/{id}` — fetch one subscription, 404 if it doesn't exist.

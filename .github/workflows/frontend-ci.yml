@@ -33,8 +33,14 @@ jobs:
       - name: Install
         run: npm install
 
+      # The example env sets NEXT_PUBLIC_DEV_WALLET=1 (local anvil dev), but
+      # this job runs `next build` — a production build — and lib/magic.ts
+      # deliberately fails production builds that carry the shared dev key.
+      # Flip the flag off so CI builds the way a real deploy would.
       - name: Env for build
-        run: cp .env.local.example .env.local
+        run: |
+          cp .env.local.example .env.local
+          sed -i 's/^NEXT_PUBLIC_DEV_WALLET=1/NEXT_PUBLIC_DEV_WALLET=0/' .env.local
 
       - name: Typecheck
         run: npm run typecheck
