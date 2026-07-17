@@ -40,6 +40,10 @@ function SubscriptionsView() {
   // cadence reasoning as useSubscriptions: a charge fires server-side and
   // should appear on its own; the backend's 30s cache keeps this cheap.
   const [payments, setPayments] = useState<Payment[] | null>(null);
+  // Which Activity row is expanded — at most one (accordion): opening a
+  // row closes whichever was open. Keyed by tx hash + sub id, same key
+  // the list renders by.
+  const [openPayment, setOpenPayment] = useState<string | null>(null);
   useEffect(() => {
     if (!address) return;
     let cancelled = false;
@@ -218,11 +222,14 @@ function SubscriptionsView() {
               // lookups degrade to undefined gracefully while loading.
               const sub = subscriptions.find((s) => s.id === p.subId);
               const plan = sub ? plans.get(sub.planId) : undefined;
+              const rowKey = `${p.txHash}-${p.subId}`;
               return (
                 <PaymentRow
-                  key={`${p.txHash}-${p.subId}`}
+                  key={rowKey}
                   payment={p}
                   cadence={plan ? `every ${intervalLabel(plan.intervalSecs)}` : undefined}
+                  open={openPayment === rowKey}
+                  onToggle={() => setOpenPayment((cur) => (cur === rowKey ? null : rowKey))}
                 />
               );
             })}

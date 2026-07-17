@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { getChain } from '@/lib/chain';
 import { formatUSDC, shortAddress, timeAgo } from '@/lib/format';
 import type { Payment } from '@/types';
@@ -12,14 +11,22 @@ import type { Payment } from '@/types';
 // where you come to understand a charge, and being yanked straight to
 // Arbiscan answers a question nobody asked yet. The explorer stays one
 // tap away — just labeled, inside the details, after the app's own answer.
+//
+// open/onToggle are controlled by the feed, not local state, so the list
+// behaves as an accordion — opening a row closes the previous one. One
+// charge is the thing being inspected at a time; two open fact sheets is
+// clutter, and the feed owning the state is what makes that rule possible.
 export function PaymentRow({
   payment,
   cadence,
+  open,
+  onToggle,
 }: {
   payment: Payment;
   cadence?: string; // "every 30 days" — omitted when the plan isn't loaded
+  open: boolean;
+  onToggle: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const explorer = getChain().blockExplorers?.default;
 
   const facts: { label: string; value: string }[] = [
@@ -35,7 +42,7 @@ export function PaymentRow({
   return (
     <div className="rounded-xl border border-line bg-canvas/40 transition hover:border-ink/30">
       <button
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         aria-expanded={open}
         className="flex w-full items-center gap-4 px-4 py-3 text-left"
       >
