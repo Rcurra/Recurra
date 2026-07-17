@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
-import { OrbitalVault, VaultModal } from '@/features/vault';
+import { VaultHero, VaultModal } from '@/features/vault';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
@@ -23,10 +23,9 @@ import {
 } from '@/lib/format';
 import { getVaultBalance } from '@/lib/wallet';
 
-// Overview — the vault is a star system and it IS the page: balance at
-// the center like a sun, every active subscription an orbit whose moon's
-// position is real contract state (nextPaymentDue). The subscriptions
-// table below is the flat-list view of the same truth.
+// Overview — the vault hero up top (balance, runway, the two permanent
+// actions), the Subscriptions list right below it as the one real "see
+// everything" surface (each row wears its own ring, real cycle progress).
 export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
@@ -158,15 +157,12 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* ── the vault — a star system ───────────────────────── */}
+      {/* ── the vault ─────────────────────────────────────────── */}
       <div style={{ animation: 'fadeUp 0.7s ease both' }}>
-        <OrbitalVault
+        <VaultHero
           balance={vaultBalance}
-          orbiting={tableRows.flatMap((sub) => {
-            const plan = plans.get(sub.planId);
-            return plan ? [{ sub, plan }] : [];
-          })}
-          totalActive={active.length}
+          monthly={monthly}
+          hasActive={active.length > 0}
           onOpenVault={() => setVaultOpen(true)}
         />
       </div>

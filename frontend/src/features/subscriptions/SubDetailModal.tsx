@@ -20,13 +20,19 @@ const RECEIPT_TITLES: Record<SubscriptionReceipt['kind'], string> = {
 };
 
 // The live countdown — real chain state, not decoration. Ticks every
-// second toward nextPaymentDue.
-function useCountdown(target: Date) {
+// second toward nextPaymentDue. `enabled` gates the ticking itself, not
+// just whether the text is shown — an unavailable subscription's charge is
+// real and still coming, but a second-by-second countdown reads as "watch
+// this," which isn't true of something that won't change again until you
+// act on it (same reasoning as the card's ring losing its breathing pulse
+// for this same state). Frozen at whatever `now` was on mount instead.
+function useCountdown(target: Date, enabled: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!enabled) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [enabled]);
 
   const ms = target.getTime() - now;
   if (ms <= 0) return { due: true, text: 'due now' };
@@ -90,8 +96,14 @@ function SubDetailContent({
   onClose: () => void;
   onCancelled?: () => void;
 }) {
-  const countdown = useCountdown(sub.nextPaymentDue);
   const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+  // Derived, not passed in — this modal is opened from several places
+  // (Subscriptions' three tabs, Discover's "yours" rows) and shouldn't need
+  // every caller to compute and thread this through. Same meaning as
+  // SubscriptionCard's `unavailable`: still active and charging normally,
+  // just no longer open to new subscribers.
+  const unavailable = sub.active && plan !== null && !plan.active;
+  const countdown = useCountdown(sub.nextPaymentDue, sub.active && !unavailable);
   const { address } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -141,7 +153,7 @@ function SubDetailContent({
     { label: 'Merchant', value: plan ? shortAddress(plan.merchant) : '—' },
     { label: 'Plan', value: `#${sub.planId}` },
     { label: 'Max exposure', value: plan ? `${formatUSDC(plan.amount)} USDC / cycle` : '—' },
-    { label: 'Status', value: sub.active ? 'Active' : 'Cancelled' },
+    { label: 'Status', value: sub.active ? (unavailable ? 'Active — plan unavailable' : 'Active') : 'Cancelled' },
   ];
 
   // Portaled to <body>, fixed backdrop — this was the last modal in the
@@ -179,13 +191,15 @@ function SubDetailContent({
             </span>
           </p>
           <p className="mt-1.5 text-[11px] font-light text-ink-muted">
-            {sub.active ? (
-              <>
-                next charge <span className="numeric text-ink">{countdown.text}</span>
-              </>
-            ) : (
-              'no more charges — history kept below'
-            )}
+            {!sub.active
+              ? 'no more charges — history kept below'
+              : unavailable
+                ? 'the merchant no longer offers this plan to new subscribers — your charges continue as normal'
+                : (
+                    <>
+                      next charge <span className="numeric text-ink">{countdown.text}</span>
+                    </>
+                  )}
           </p>
 
           {/* the cycle, drawn as a line — the one animated element left,

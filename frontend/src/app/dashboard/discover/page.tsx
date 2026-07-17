@@ -1,32 +1,146 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { PlanDetailModal, useSubscriptions } from '@/features/subscriptions';
+import type { ReactNode } from 'react';
+import { PlanDetailModal, SubDetailModal, useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
-import type { Plan } from '@/types';
+import type { Plan, Subscription } from '@/types';
 import { GlassPanel } from '@/components/GlassPanel';
 import { LoadingLine } from '@/components/LoadingLine';
 import { MerchantMark } from '@/components/MerchantMark';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
 
+// One ordering rule for the whole page — cheapest-per-month first — used
+// by every section below (module-level so the local panel component can
+// share it too, not just the page component).
+function byMonthlyEquivalent(a: Plan, b: Plan): number {
+  return Number(monthlyEquivalent(a.amount, a.intervalSecs)) - Number(monthlyEquivalent(b.amount, b.intervalSecs));
+}
+
+function groupByMerchant<T extends { merchant: string }>(list: T[]): Map<string, T[]> {
+  const byMerchant = new Map<string, T[]>();
+  for (const item of list) {
+    const existing = byMerchant.get(item.merchant) ?? [];
+    existing.push(item);
+    byMerchant.set(item.merchant, existing);
+  }
+  return byMerchant;
+}
+
+// One row per plan, one visual shape shared by all three sections below —
+// only what sits in the trailing action cell differs (a real button when
+// there's something to do, a static tag when there's isn't). Whole row is
+// the button when `onClick` is given, matching the catalog's original
+// "the row itself is the button" rule.
+function PlanRow({ plan, actionLabel, onClick }: { plan: Plan; actionLabel: string; onClick?: () => void }) {
+  const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
+  const cells = (
+    <>
+      <span className="numeric text-lg leading-none text-ink">
+        {formatUSDC(plan.amount)}
+        <span className="pl-1.5 text-[10px] text-ink-faint">USDC</span>
+      </span>
+      <span className="numeric self-center text-[11px] text-ink-muted">{intervalLabel(plan.intervalSecs)}</span>
+      <span className="numeric self-center text-[11px] text-ink-muted">{formatUSDC(monthly)} USDC</span>
+      <span className="numeric self-center text-[11px] text-ink-faint">{formatUSDC(plan.amount)} USDC / cycle</span>
+    </>
+  );
+
+  return (
+    <li className="overflow-hidden rounded-xl border border-line bg-canvas/30">
+      {onClick ? (
+        <button
+          onClick={onClick}
+          aria-haspopup="dialog"
+          className="group flex w-full flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4 text-left transition hover:bg-ink/[0.04] sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto]"
+        >
+          {cells}
+          {/* an invitation, not a disclosure — the chip fills white the
+              moment the cursor considers it */}
+          <span className="self-center rounded-full border border-line px-3.5 py-1.5 text-[11px] tracking-[0.06em] text-ink-muted transition group-hover:border-ink group-hover:bg-ink group-hover:font-semibold group-hover:text-canvas">
+            {actionLabel}
+          </span>
+        </button>
+      ) : (
+        <div className="flex w-full flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4 text-left sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto]">
+          {cells}
+          <span className="self-center rounded-full border border-line px-3.5 py-1.5 text-[11px] tracking-[0.06em] text-ink-faint">
+            {actionLabel}
+          </span>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MerchantPanel({
+  merchant,
+  merchantPlans,
+  renderRow,
+  animationDelay,
+  dim = false,
+}: {
+  merchant: string;
+  merchantPlans: Plan[];
+  renderRow: (plan: Plan) => ReactNode;
+  animationDelay: number;
+  dim?: boolean;
+}) {
+  return (
+    <GlassPanel
+      hairline
+      className={dim ? 'opacity-60' : undefined}
+      style={{ animation: `fadeUp 0.6s ease both ${animationDelay}s` }}
+    >
+      <div className="flex items-center gap-3 px-6 pt-5 pb-4">
+        <MerchantMark address={merchant} size={34} />
+        <div>
+          <p className="numeric text-sm text-ink">{shortAddress(merchant)}</p>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            merchant · {merchantPlans.length} plan{merchantPlans.length === 1 ? '' : 's'}
+          </p>
+        </div>
+      </div>
+
+      <div className="hidden border-t border-line px-6 py-2 sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto] sm:gap-x-6">
+        {['Price', 'Every', '≈ per month', 'Capped at', ''].map((h, i) => (
+          <span key={i} className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {/* each row its own bounded box with real air between them, not just
+          a hairline divider — a continuous list read as one undifferentiated
+          block, especially where a row's state (e.g. "no longer offered")
+          needs to visually stand apart from its neighbors, not blend in */}
+      <ul className="space-y-2 border-t border-line p-3">
+        {[...merchantPlans].sort(byMonthlyEquivalent).map((plan) => renderRow(plan))}
+      </ul>
+    </GlassPanel>
+  );
+}
+
 // Discover — one glass panel per merchant, plans as quiet rows inside it
-// (a catalog reads like a ledger, not an app store). The merchant's
-// deterministic planet mark is the identity; each row leads with what
-// the chain actually knows: price, cadence, per-month equivalent, max
-// exposure. The row itself is the button — no white slabs shouting
-// "subscribe" four times per screen; the modal holds the real action.
+// (a catalog reads like a ledger, not an app store — one visual language
+// for "a plan," used by all three sections here, not a special card
+// treatment for the ones you already hold). The merchant's deterministic
+// planet mark is the identity; each row leads with what the chain actually
+// knows: price, cadence, per-month equivalent, max exposure.
 //
-// Two sides: plans you're already on (re-subscribing would just revert
-// AlreadySubscribed) get a compact strip pointing at Subscriptions,
-// separate from what's actually browsable.
+// Three real scopes: what you're already on (rows, opens the same
+// manage/cancel modal Subscriptions uses), what you can actually
+// subscribe to, and what the merchant has since pulled — visible for
+// transparency, never clickable unless you hold it (subscribe() would
+// revert PlanNotActive for anyone else).
 export default function DiscoverPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Plan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [selectedSub, setSelectedSub] = useState<Subscription | null>(null);
 
   const { subscriptions, refetch } = useSubscriptions(address);
   const subscribedPlanIds = new Set(subscriptions.filter((s) => s.active).map((s) => s.planId));
@@ -39,19 +153,25 @@ export default function DiscoverPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const yourPlans = plans.filter((p) => subscribedPlanIds.has(p.id));
-  // Browsable-only: a deactivated plan can't accept new subscribe() calls
-  // (PlanNotActive) — but a plan you already hold stays visible above even
-  // if the merchant deactivates it later; you still need to manage it.
-  const otherPlans = plans.filter((p) => !subscribedPlanIds.has(p.id) && p.active);
+  // 1 — yours: active subscriptions, paired with their plan.
+  const yourSubscriptions = subscriptions
+    .filter((s) => s.active)
+    .map((s) => ({ sub: s, plan: plans.find((p) => p.id === s.planId) ?? null }))
+    .filter((x): x is { sub: Subscription; plan: Plan } => x.plan !== null);
+  const yourPlansByMerchant = groupByMerchant(yourSubscriptions.map((x) => x.plan));
+  const subByPlanId = new Map(yourSubscriptions.map((x) => [x.plan.id, x.sub]));
 
-  // group by merchant, insertion-ordered
-  const byMerchant = new Map<string, Plan[]>();
-  for (const p of otherPlans) {
-    const list = byMerchant.get(p.merchant) ?? [];
-    list.push(p);
-    byMerchant.set(p.merchant, list);
-  }
+  // 2 — available: not subscribed, still accepting new subscribers.
+  const availablePlans = plans.filter((p) => !subscribedPlanIds.has(p.id) && p.active);
+  const availableByMerchant = groupByMerchant(availablePlans);
+
+  // 3 — no longer offered: not subscribed, merchant deactivated it. Can
+  // never be subscribed to (PlanNotActive) — shown for transparency only.
+  // A plan you DO hold that's been deactivated stays in section 1 instead,
+  // tagged accordingly there — you still need to manage it, so it belongs
+  // with the rest of what's yours, not here.
+  const unavailablePlans = plans.filter((p) => !subscribedPlanIds.has(p.id) && !p.active);
+  const unavailableByMerchant = groupByMerchant(unavailablePlans);
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
@@ -87,109 +207,79 @@ export default function DiscoverPage() {
         </GlassPanel>
       )}
 
-      {/* ── what you're already on — a quiet strip, not a storefront ── */}
-      {yourPlans.length > 0 && (
-        <section className="mb-8" style={{ animation: 'fadeUp 0.7s ease both' }}>
-          <GlassPanel className="px-6 py-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-ink-faint">On your vault</p>
-                {yourPlans.map((plan) => (
-                  <span key={plan.id} className="flex items-center gap-2">
-                    <MerchantMark address={plan.merchant} size={18} />
-                    <span className="numeric text-xs text-ink">
-                      {formatUSDC(plan.amount)}
-                      <span className="text-ink-faint"> / {intervalLabel(plan.intervalSecs)}</span>
-                    </span>
-                  </span>
-                ))}
-              </div>
-              <Link
-                href="/dashboard/subscriptions"
-                className="text-[11px] tracking-[0.08em] text-ink-muted transition hover:text-ink"
-              >
-                Manage →
-              </Link>
-            </div>
-          </GlassPanel>
+      {/* ── 1. yours — same row language as everything else on this
+          page, opening the same manage/cancel modal Subscriptions does
+          (never the Subscribe flow — you already hold these) ────── */}
+      {yourPlansByMerchant.size > 0 && (
+        <section className="mb-10">
+          <p className="mb-3 text-[10px] uppercase tracking-[0.2em] text-ink-faint">Your subscriptions</p>
+          <div className="space-y-6">
+            {Array.from(yourPlansByMerchant.entries()).map(([merchant, merchantPlans], mi) => (
+              <MerchantPanel
+                key={merchant}
+                merchant={merchant}
+                merchantPlans={merchantPlans}
+                animationDelay={mi * 0.12}
+                renderRow={(plan) => (
+                  <PlanRow
+                    key={plan.id}
+                    plan={plan}
+                    actionLabel={plan.active ? 'Manage →' : 'no longer offered — Manage →'}
+                    onClick={() => setSelectedSub(subByPlanId.get(plan.id) ?? null)}
+                  />
+                )}
+              />
+            ))}
+          </div>
         </section>
       )}
 
-      {/* ── the catalog — one panel per merchant, plans as rows,
-          arriving one after another like they're glad to be here ── */}
-      <div className="space-y-6">
-        {Array.from(byMerchant.entries()).map(([merchant, merchantPlans], mi) => (
-          <GlassPanel
-            key={merchant}
-            hairline
-            style={{ animation: `fadeUp 0.6s ease both ${0.12 + mi * 0.12}s` }}
-          >
-            {/* merchant header — the planet is the identity */}
-            <div className="flex items-center gap-3 px-6 pt-5 pb-4">
-              <MerchantMark address={merchant} size={34} />
-              <div>
-                <p className="numeric text-sm text-ink">{shortAddress(merchant)}</p>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-                  merchant · {merchantPlans.length} plan{merchantPlans.length === 1 ? '' : 's'}
-                </p>
-              </div>
-            </div>
+      {/* ── 2. available — the ledger, one panel per merchant ────── */}
+      {availableByMerchant.size > 0 && (
+        <section className="mb-10">
+          <p className="mb-3 text-[10px] uppercase tracking-[0.2em] text-ink-faint">Available to subscribe</p>
+          <div className="space-y-6">
+            {Array.from(availableByMerchant.entries()).map(([merchant, merchantPlans], mi) => (
+              <MerchantPanel
+                key={merchant}
+                merchant={merchant}
+                merchantPlans={merchantPlans}
+                animationDelay={0.12 + mi * 0.12}
+                renderRow={(plan) => (
+                  <PlanRow key={plan.id} plan={plan} actionLabel="Subscribe →" onClick={() => setSelectedPlan(plan)} />
+                )}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-            {/* column headers — the instrument-panel move that makes the
-                rows scannable: every number sits in a lane, so the eye can
-                run straight down "what does this cost per month" */}
-            <div className="hidden border-t border-line px-6 py-2 sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto] sm:gap-x-6">
-              {['Price', 'Every', '≈ per month', 'Capped at', ''].map((h, i) => (
-                <span key={i} className="text-[9px] uppercase tracking-[0.18em] text-ink-faint">
-                  {h}
-                </span>
-              ))}
-            </div>
+      {/* ── 3. no longer offered — visible, never clickable ──────── */}
+      {unavailableByMerchant.size > 0 && (
+        <section>
+          <p className="mb-3 text-[10px] uppercase tracking-[0.2em] text-ink-faint">No longer offered</p>
+          <div className="space-y-6">
+            {Array.from(unavailableByMerchant.entries()).map(([merchant, merchantPlans], mi) => (
+              <MerchantPanel
+                key={merchant}
+                merchant={merchant}
+                merchantPlans={merchantPlans}
+                animationDelay={0.12 + mi * 0.12}
+                dim
+                renderRow={(plan) => <PlanRow key={plan.id} plan={plan} actionLabel="no longer offered" />}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-            <ul>
-              {[...merchantPlans]
-                .sort(
-                  (a, b) =>
-                    Number(monthlyEquivalent(a.amount, a.intervalSecs)) -
-                    Number(monthlyEquivalent(b.amount, b.intervalSecs)),
-                )
-                .map((plan) => {
-                  const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
-                  return (
-                    <li key={plan.id} className="border-t border-line">
-                      <button
-                        onClick={() => setSelected(plan)}
-                        aria-haspopup="dialog"
-                        className="group flex w-full flex-wrap items-baseline gap-x-6 gap-y-1 px-6 py-4 text-left transition hover:bg-ink/[0.04] sm:grid sm:grid-cols-[1.2fr_0.9fr_1fr_1.1fr_auto]"
-                      >
-                        <span className="numeric text-lg leading-none text-ink">
-                          {formatUSDC(plan.amount)}
-                          <span className="pl-1.5 text-[10px] text-ink-faint">USDC</span>
-                        </span>
-                        <span className="numeric self-center text-[11px] text-ink-muted">
-                          {intervalLabel(plan.intervalSecs)}
-                        </span>
-                        <span className="numeric self-center text-[11px] text-ink-muted">
-                          {formatUSDC(monthly)} USDC
-                        </span>
-                        <span className="numeric self-center text-[11px] text-ink-faint">
-                          {formatUSDC(plan.amount)} USDC / cycle
-                        </span>
-                        {/* an invitation, not a disclosure — the chip fills
-                            white the moment the cursor considers it */}
-                        <span className="self-center rounded-full border border-line px-3.5 py-1.5 text-[11px] tracking-[0.06em] text-ink-muted transition group-hover:border-ink group-hover:bg-ink group-hover:font-semibold group-hover:text-canvas">
-                          Subscribe →
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-            </ul>
-          </GlassPanel>
-        ))}
-      </div>
-
-      <PlanDetailModal plan={selected} onClose={() => setSelected(null)} onSubscribed={refetch} />
+      <PlanDetailModal plan={selectedPlan} onClose={() => setSelectedPlan(null)} onSubscribed={refetch} />
+      <SubDetailModal
+        sub={selectedSub}
+        plan={selectedSub ? (plans.find((p) => p.id === selectedSub.planId) ?? null) : null}
+        onClose={() => setSelectedSub(null)}
+        onCancelled={refetch}
+      />
     </div>
   );
 }

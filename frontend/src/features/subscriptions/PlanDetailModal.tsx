@@ -71,7 +71,17 @@ function PlanDetailContent({
 
   const monthly = monthlyEquivalent(plan.amount, plan.intervalSecs);
   const isMonthly = plan.intervalSecs === MONTH_SECS;
-  const fundAmount = monthly * BigInt(months);
+  const runwayTarget = monthly * BigInt(months);
+  // The plan's own per-cycle amount is a hard floor on the funding target.
+  // "N months of monthly-equivalent" undershoots badly for any plan whose
+  // cadence is longer than N months — e.g. a 365-day plan's "3 months of
+  // runway" is ~11 USDC against a real 45 USDC charge. Found live
+  // 2026-07-17: a subscription funded below its own cycle amount sits
+  // there forever, the scheduler correctly refusing every tick
+  // (InsufficientVaultBalance) with nothing in the UI explaining why
+  // "your first charge fires today" never actually happened.
+  const fundAmount = runwayTarget > plan.amount ? runwayTarget : plan.amount;
+  const runwayUndershootsOneCycle = fundAmount > runwayTarget;
   const signing = phase === 'signing';
 
   async function handleSubscribe() {
@@ -207,10 +217,21 @@ function PlanDetailContent({
                 <p className="mt-3 text-[11px] font-light leading-relaxed text-ink-muted">
                   Your vault will hold{' '}
                   <span className="numeric text-ink">{formatUSDC(fundAmount)} USDC</span>{' '}
-                  — only topped up from your wallet if it doesn&apos;t already. Your first charge
-                  fires today, then you&apos;re covered for the next{' '}
-                  <span className="numeric text-ink">{months} months</span> without adding more. It
-                  stays yours — withdraw anytime. Recurra can only ever move{' '}
+                  — only topped up from your wallet if it doesn&apos;t already.{' '}
+                  {runwayUndershootsOneCycle ? (
+                    <>
+                      Since this plan bills its full amount every {intervalLabel(plan.intervalSecs)},
+                      that&apos;s one full cycle rather than your {months}-month selection — enough for
+                      today&apos;s first charge to actually go through. You&apos;ll want to add more
+                      before the one after that.
+                    </>
+                  ) : (
+                    <>
+                      Your first charge fires today, then you&apos;re covered for the next{' '}
+                      <span className="numeric text-ink">{months} months</span> without adding more.
+                    </>
+                  )}{' '}
+                  It stays yours — withdraw anytime. Recurra can only ever move{' '}
                   <span className="numeric text-ink">{formatUSDC(plan.amount)} USDC</span> every{' '}
                   {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
                 </p>
