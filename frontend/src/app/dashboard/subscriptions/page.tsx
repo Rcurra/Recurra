@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SubDetailModal, SubscriptionCard, useSubscriptions } from '@/features/subscriptions';
 import type { Payment, Subscription } from '@/types';
@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { LoadingLine } from '@/components/LoadingLine';
 import { PaymentRow } from '@/components/PaymentRow';
+import { useChargeDetection } from '@/hooks/useChargeDetection';
 import { formatUSDC, intervalLabel, shortAddress } from '@/lib/format';
 
 type Filter = 'active' | 'cancelled' | 'unavailable' | 'activity';
@@ -63,13 +64,7 @@ function SubscriptionsView() {
   }, [address]);
 
   const { subscriptions, loading, error, refetch } = useSubscriptions(address);
-  // The charge moment: nextPaymentDue advancing between polls IS a payment
-  // having fired (markPaid runs right before debit) -- whatever triggers
-  // executePayment (a terminal cast call today, Henry's scheduler once it
-  // lands), this detection doesn't change.
-  const prevDueRef = useRef<Map<number, number>>(new Map());
-  const [justCharged, setJustCharged] = useState<Set<number>>(new Set());
-  const [chargeToasts, setChargeToasts] = useState<{ id: number; sub: Subscription }[]>([]);
+  const { justCharged, chargeEvents: chargeToasts } = useChargeDetection(subscriptions);
 
   useEffect(() => {
     api.plans
@@ -77,48 +72,6 @@ function SubscriptionsView() {
       .then((list) => setPlans(new Map(list.map((p) => [p.id, p]))))
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    const prev = prevDueRef.current;
-    const next = new Map<number, number>();
-    const charged: Subscription[] = [];
-    for (const s of subscriptions) {
-      const dueMs = s.nextPaymentDue.getTime();
-      next.set(s.id, dueMs);
-      const prevMs = prev.get(s.id);
-      if (prevMs !== undefined && dueMs > prevMs) charged.push(s);
-    }
-    prevDueRef.current = next;
-    if (charged.length === 0) return;
-
-    // Deferred a tick (react-hooks/set-state-in-effect) -- same reasoning
-    // as useSubscriptions' nonce-refetch: don't call setState synchronously
-    // inside the effect body.
-    setTimeout(() => {
-      setJustCharged((old) => {
-        const merged = new Set(old);
-        charged.forEach((s) => merged.add(s.id));
-        return merged;
-      });
-      charged.forEach((s) => {
-        const toastId = Date.now() + s.id;
-        setChargeToasts((old) => [...old, { id: toastId, sub: s }]);
-        setTimeout(() => {
-          setChargeToasts((old) => old.filter((t) => t.id !== toastId));
-        }, 5000);
-      });
-    }, 0);
-
-    charged.forEach((s) => {
-      setTimeout(() => {
-        setJustCharged((old) => {
-          const copy = new Set(old);
-          copy.delete(s.id);
-          return copy;
-        });
-      }, 4500);
-    });
-  }, [subscriptions]);
 
   // Two subscription states only — the contracts don't have a "finished"
   // subscription, just active (renews every cycle) and cancelled
