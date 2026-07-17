@@ -25,11 +25,28 @@ impl fmt::Display for AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
+        // NotFound/BadRequest describe the caller's own request — safe and
+        // useful to echo back. Chain/Internal describe OUR side (raw RPC
+        // transport errors can carry the provider URL, alloy internals, CLI
+        // stderr) — that detail belongs in the server log, and the client
+        // gets a generic line it can't mine for infrastructure details.
         let (status, message) = match self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
-            AppError::Chain(msg) => (StatusCode::BAD_GATEWAY, msg),
-            AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            AppError::Chain(msg) => {
+                tracing::error!(detail = %msg, "chain error while serving request");
+                (
+                    StatusCode::BAD_GATEWAY,
+                    "upstream chain request failed".to_string(),
+                )
+            }
+            AppError::Internal(msg) => {
+                tracing::error!(detail = %msg, "internal error while serving request");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal error".to_string(),
+                )
+            }
         };
         (status, Json(json!({ "error": message }))).into_response()
     }
