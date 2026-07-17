@@ -1,25 +1,62 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { SubDetailModal, SubscriptionCard, useSubscriptions } from '@/features/subscriptions';
-import type { Subscription } from '@/types';
+import type { Payment, Subscription } from '@/types';
 import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { LoadingLine } from '@/components/LoadingLine';
+import { ReceiptListRow } from '@/components/ReceiptListRow';
 import { formatUSDC, shortAddress } from '@/lib/format';
 
-type Filter = 'active' | 'cancelled' | 'unavailable';
+type Filter = 'active' | 'cancelled' | 'unavailable' | 'activity';
 
+const isFilter = (v: string | null): v is Filter =>
+  v === 'active' || v === 'cancelled' || v === 'unavailable' || v === 'activity';
+
+// Suspense because useSearchParams (the ?tab= deep link the old
+// /dashboard/activity redirect sends) suspends during prerender.
 export default function SubscriptionsPage() {
-  return <SubscriptionsView />;
+  return (
+    <Suspense>
+      <SubscriptionsView />
+    </Suspense>
+  );
 }
 
 function SubscriptionsView() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
-  const [filter, setFilter] = useState<Filter>('active');
+  // ?tab=activity (etc.) honored on load — the old /dashboard/activity
+  // route redirects here with it, and it makes the tab linkable in general.
+  const tabParam = useSearchParams().get('tab');
+  const [filter, setFilter] = useState<Filter>(isFilter(tabParam) ? tabParam : 'active');
   const [selected, setSelected] = useState<Subscription | null>(null);
+
+  // F5's Activity — the money that actually moved, served by GET /payments
+  // (PaymentExecuted history), never derived client-side. Poll on the same
+  // cadence reasoning as useSubscriptions: a charge fires server-side and
+  // should appear on its own; the backend's 30s cache keeps this cheap.
+  const [payments, setPayments] = useState<Payment[] | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    const load = () =>
+      api.payments
+        .list(address)
+        .then((list) => {
+          if (!cancelled) setPayments(list);
+        })
+        .catch(() => {}); // the tab shows its own quiet empty/error state
+    load();
+    const id = setInterval(load, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [address]);
 
   const { subscriptions, loading, error, refetch } = useSubscriptions(address);
   // The charge moment: nextPaymentDue advancing between polls IS a payment
@@ -94,7 +131,18 @@ function SubscriptionsView() {
   const active = subscriptions.filter((s) => s.active && (plans.get(s.planId)?.active ?? true));
   const unavailable = subscriptions.filter((s) => s.active && plans.get(s.planId)?.active === false);
   const cancelled = subscriptions.filter((s) => !s.active);
-  const shown = filter === 'active' ? active : filter === 'unavailable' ? unavailable : cancelled;
+  const shown =
+    filter === 'active'
+      ? active
+      : filter === 'unavailable'
+        ? unavailable
+        : filter === 'cancelled'
+          ? cancelled
+          : []; // 'activity' renders its own timeline, not sub cards
+
+  // Newest first — an activity feed leads with what just happened (the
+  // backend serves oldest-first by block number).
+  const paymentsNewestFirst = payments ? [...payments].reverse() : null;
 
   return (
     <div className="mx-auto max-w-3xl px-6 pt-12 pb-16">
@@ -120,16 +168,17 @@ function SubscriptionsView() {
         </div>
       )}
 
-      {/* header row: state filters — Activity's fake preview retired now
-          that receipts are real, per-subscription (open any card for its
-          own receipt list, backed by an on-chain PaymentExecuted scan) */}
+      {/* header row: state filters + Activity — the real F5 surface now,
+          fed by GET /payments (PaymentExecuted history via the backend),
+          replacing the retired fake preview */}
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3" style={{ animation: 'fadeUp 0.7s ease both' }}>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(
             [
               { key: 'active', label: `Active (${active.length})` },
               { key: 'unavailable', label: `Unavailable (${unavailable.length})` },
               { key: 'cancelled', label: `Cancelled (${cancelled.length})` },
+              { key: 'activity', label: payments === null ? 'Activity' : `Activity (${payments.length})` },
             ] as const
           ).map((t) => (
             <button
@@ -147,8 +196,44 @@ function SubscriptionsView() {
         </div>
       </div>
 
-      {/* ── the cadences — each subscription wears its ring ───── */}
-      {error && <p className="mb-4 text-sm text-danger">{error}</p>}
+      {filter === 'activity' ? (
+        /* ── the money that actually moved — one row per charge, straight
+            from PaymentExecuted history. Arbiscan is one tap away on every
+            row (ReceiptListRow wraps itself in the explorer link). ── */
+        paymentsNewestFirst === null ? (
+          <LoadingLine label="loading activity…" />
+        ) : paymentsNewestFirst.length === 0 ? (
+          <div
+            className="rounded-2xl border border-dashed border-line bg-surface/50 p-12 text-center"
+            style={{ animation: 'fadeUp 0.7s ease both 0.1s' }}
+          >
+            <p className="text-sm text-ink-muted">
+              No charges yet — the first receipt lands here when a payment fires.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2" style={{ animation: 'fadeUp 0.7s ease both 0.1s' }}>
+            {paymentsNewestFirst.map((p) => (
+              <ReceiptListRow
+                key={`${p.txHash}-${p.subId}`}
+                title={`charged — sub #${p.subId}`}
+                amount={`${formatUSDC(p.amount)} USDC`}
+                counterparty={p.merchant}
+                receipt={{
+                  hash: p.txHash,
+                  to: p.merchant,
+                  amount: p.amount,
+                  blockNumber: p.blockNumber,
+                  timestamp: p.timestamp,
+                }}
+              />
+            ))}
+          </div>
+        )
+      ) : (
+        <>
+          {/* ── the cadences — each subscription wears its ring ───── */}
+          {error && <p className="mb-4 text-sm text-danger">{error}</p>}
 
           {loading && !error && <LoadingLine label="loading subscriptions…" />}
 
@@ -179,6 +264,8 @@ function SubscriptionsView() {
               />
             ))}
           </div>
+        </>
+      )}
 
       <SubDetailModal
         sub={selected}

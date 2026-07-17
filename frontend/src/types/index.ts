@@ -14,6 +14,20 @@ export interface Plan {
   active: boolean;
 }
 
+// One historical PaymentExecuted event, as served by GET /payments — the
+// money actually moving. Close kin to lib/wallet.ts's TxReceipt on purpose
+// (hash/amount/block/timestamp) so receipt components render either.
+export interface Payment {
+  subId: number;
+  subscriber: string; // checksummed address
+  merchant: string; // checksummed address
+  token: string; // ERC-20 address
+  amount: bigint; // token smallest units
+  txHash: string;
+  blockNumber: bigint;
+  timestamp: Date;
+}
+
 export interface Subscription {
   id: number;
   planId: number;
