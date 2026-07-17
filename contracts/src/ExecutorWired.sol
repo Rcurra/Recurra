@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// One-time executor wiring, shared by SubscriptionRegistry (gates markPaid)
 /// and SubscriptionVault (gates debit). One copy of the security-sensitive
@@ -12,7 +13,11 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 /// similar but is repeatable by design (Openfort key rotation). The contract
 /// wiring here is permanent; the operational signer there is rotatable.
 /// That difference is a feature, not duplication.
-abstract contract ExecutorWired is Ownable {
+// Ownable2Step, not plain Ownable: the owner's one power here (setExecutor,
+// once) is unrecoverable if ownership is fat-fingered to a wrong address —
+// two-step transfer means the new owner must prove it can act before the
+// old one loses the keys.
+abstract contract ExecutorWired is Ownable2Step {
     // The PaymentExecutor. Wired once at deploy, then immutable in practice.
     address public executor;
 
