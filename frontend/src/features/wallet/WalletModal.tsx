@@ -66,6 +66,7 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
 
   const [history, setHistory] = useState<WalletReceipt[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const refetchBalance = useCallback(() => {
     getUsdcBalance(address)
@@ -312,28 +313,49 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
           {/* ── history — every completed move touching this wallet's own
               balance: sent, received, and the deposit/withdraw crossings
               into and out of the vault. Charges never appear here — those
-              debit the vault directly, never this address. ── */}
-          <div className="mt-6 border-t border-line pt-5">
-            <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">History</p>
-            {history === null && !historyError && <LoadingLine label="reading the chain…" />}
-            {historyError && <InlineError message={historyError} />}
-            {history !== null && history.length === 0 && (
-              <p className="text-[11px] text-ink-faint">Nothing moved yet.</p>
-            )}
-            {history !== null && history.length > 0 && (
-              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                {history.map(({ kind, receipt: r }) => (
-                  <ReceiptListRow
-                    key={r.hash}
-                    title={HISTORY_TITLES[kind]}
-                    amount={`${formatUSDC(r.amount)} USDC`}
-                    counterparty={r.to}
-                    receipt={r}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+              debit the vault directly, never this address. Collapsed by
+              default, same reasoning as SubDetailModal's Receipts and
+              VaultModal's History: something you go looking for, not
+              something that crowds the modal on open. ── */}
+          <button
+            onClick={() => setHistoryOpen((o) => !o)}
+            className="mt-6 flex w-full items-center justify-between border-t border-line pt-5 text-left"
+            aria-expanded={historyOpen}
+          >
+            <span className="text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+              History{history !== null && ` (${history.length})`}
+            </span>
+            <svg
+              width="9"
+              height="6"
+              viewBox="0 0 9 6"
+              className={`shrink-0 text-ink-faint transition-transform duration-300 ${historyOpen ? 'rotate-180' : ''}`}
+            >
+              <path d="M1 1 L4.5 4.5 L8 1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+          {historyOpen && (
+            <div className="mt-3">
+              {history === null && !historyError && <LoadingLine label="reading the chain…" />}
+              {historyError && <InlineError message={historyError} />}
+              {history !== null && history.length === 0 && (
+                <p className="text-[11px] text-ink-faint">Nothing moved yet.</p>
+              )}
+              {history !== null && history.length > 0 && (
+                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {history.map(({ kind, receipt: r }) => (
+                    <ReceiptListRow
+                      key={r.hash}
+                      title={HISTORY_TITLES[kind]}
+                      amount={`${formatUSDC(r.amount)} USDC`}
+                      counterparty={r.to}
+                      receipt={r}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </GlassPanel>
       </div>
     </div>,

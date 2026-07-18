@@ -1,0 +1,6 @@
+target
+tests
+plan.md
+.env
+.env.example
+openfort-cli/node_modules
