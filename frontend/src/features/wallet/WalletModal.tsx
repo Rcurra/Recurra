@@ -5,12 +5,21 @@ import { createPortal } from 'react-dom';
 import { GlassPanel } from '@/components/GlassPanel';
 import { InlineError } from '@/components/InlineError';
 import { LoadingLine } from '@/components/LoadingLine';
+import { ReceiptListRow } from '@/components/ReceiptListRow';
 import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { formatUSDC, parseUSDC } from '@/lib/format';
+import { getWalletHistory, type WalletReceipt } from '@/lib/receipts';
 import { transferUsdc } from '@/lib/zerodev';
 import { getUsdcBalance, walletErrorMessage, type TxReceipt } from '@/lib/wallet';
 
 type Phase = 'idle' | 'confirm' | 'sending' | 'done' | 'error';
+
+const HISTORY_TITLES: Record<WalletReceipt['kind'], string> = {
+  sent: 'sent',
+  received: 'received',
+  deposited: 'added to vault',
+  withdrawn: 'withdrawn from vault',
+};
 
 // The wallet, opened — the door out of Recurra's world. Everything else
 // in the app keeps funds inside a custody chain the user can always walk
@@ -55,6 +64,9 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
   const [copied, setCopied] = useState(false);
   const [receipt, setReceipt] = useState<TxReceipt | null>(null);
 
+  const [history, setHistory] = useState<WalletReceipt[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
   const refetchBalance = useCallback(() => {
     getUsdcBalance(address)
       .then(setBalance)
@@ -64,6 +76,23 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
   useEffect(() => {
     refetchBalance();
   }, [refetchBalance]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWalletHistory(address)
+      .then((h) => {
+        if (!cancelled) setHistory(h);
+      })
+      .catch((e) => {
+        if (!cancelled) setHistoryError(walletErrorMessage(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // `receipt` is a deliberate re-trigger, not read in the body — mirrors
+    // VaultModal's `done` dependency: a fresh send shows up here right
+    // away instead of waiting on a poll.
+  }, [address, receipt]);
 
   const amount = parseUSDC(amountInput);
   const busy = phase === 'sending';
@@ -279,6 +308,32 @@ function WalletModalContent({ address, onClose }: { address: string; onClose: ()
               <LoadingLine label="reading your wallet…" />
             </div>
           )}
+
+          {/* ── history — every completed move touching this wallet's own
+              balance: sent, received, and the deposit/withdraw crossings
+              into and out of the vault. Charges never appear here — those
+              debit the vault directly, never this address. ── */}
+          <div className="mt-6 border-t border-line pt-5">
+            <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">History</p>
+            {history === null && !historyError && <LoadingLine label="reading the chain…" />}
+            {historyError && <InlineError message={historyError} />}
+            {history !== null && history.length === 0 && (
+              <p className="text-[11px] text-ink-faint">Nothing moved yet.</p>
+            )}
+            {history !== null && history.length > 0 && (
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                {history.map(({ kind, receipt: r }) => (
+                  <ReceiptListRow
+                    key={r.hash}
+                    title={HISTORY_TITLES[kind]}
+                    amount={`${formatUSDC(r.amount)} USDC`}
+                    counterparty={r.to}
+                    receipt={r}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </GlassPanel>
       </div>
     </div>,
