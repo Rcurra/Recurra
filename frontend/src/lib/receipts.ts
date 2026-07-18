@@ -20,7 +20,7 @@ import { createPublicClient, http, parseAbiItem, parseEventLogs } from 'viem';
 import { api } from '@/services/api';
 import type { Payment } from '@/types';
 import { getChain } from './chain';
-import { getExecutorDeployBlock, getRegistryAddress, getVaultAddress } from './contracts';
+import { getExecutorDeployBlock, getRegistryAddress, getUsdcAddress, getVaultAddress } from './contracts';
 import { buildTxReceipt, type TxReceipt } from './wallet';
 
 const subscribedEvent = parseAbiItem(
@@ -33,6 +33,7 @@ const depositedEvent = parseAbiItem(
 const withdrawnEvent = parseAbiItem(
   'event Withdrawn(address indexed subscriber, address indexed token, uint256 amount)',
 );
+const transferEvent = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)');
 
 // A Payment from the API already carries everything TxReceipt needs — no
 // per-row chain lookups (buildTxReceipt's block fetch) for charges anymore.
@@ -118,6 +119,58 @@ export async function getSubscriptionReceipts(
       0n,
     );
     results.push({ kind: 'cancelled', receipt });
+  }
+
+  return results.sort((a, b) =>
+    a.receipt.blockNumber < b.receipt.blockNumber ? -1 : a.receipt.blockNumber > b.receipt.blockNumber ? 1 : 0,
+  );
+}
+
+export type WalletReceipt = { kind: 'sent' | 'received' | 'deposited' | 'withdrawn'; receipt: TxReceipt };
+
+// The wallet's own ledger — every USDC unit that ever crossed this EOA's
+// boundary, in or out, regardless of where it came from or went. A single
+// Transfer-event scan on the token itself covers all four cases (a deposit
+// IS a Transfer(wallet, vault, ...) under the hood, a withdraw IS
+// Transfer(vault, wallet, ...), same for Send and any plain incoming
+// transfer) — no need to separately reconcile against Deposited/Withdrawn/
+// PaymentExecuted the way getVaultHistory does, since none of those move
+// the wallet's own balance except through a Transfer this scan already sees.
+// Deliberately excludes charges: a scheduler tick debits the VAULT, never
+// the wallet directly, so it has no place in "what happened to my wallet."
+export async function getWalletHistory(address: string): Promise<WalletReceipt[]> {
+  const usdc = getUsdcAddress();
+  const vault = getVaultAddress();
+  const client = getLogsClient();
+  const fromBlock = getExecutorDeployBlock();
+  const account = address as `0x${string}`;
+
+  const [outgoing, incoming] = await Promise.all([
+    client.getLogs({ address: usdc, event: transferEvent, args: { from: account }, fromBlock, toBlock: 'latest' }),
+    client.getLogs({ address: usdc, event: transferEvent, args: { to: account }, fromBlock, toBlock: 'latest' }),
+  ]);
+
+  const results: WalletReceipt[] = [];
+  const isVault = (a: string) => a.toLowerCase() === vault.toLowerCase();
+
+  for (const log of outgoing) {
+    const to = log.args.to as string;
+    const receipt = await buildTxReceipt(
+      { transactionHash: log.transactionHash, blockNumber: log.blockNumber },
+      to,
+      log.args.value as bigint,
+    );
+    results.push({ kind: isVault(to) ? 'deposited' : 'sent', receipt });
+  }
+
+  for (const log of incoming) {
+    const from = log.args.from as string;
+    const receipt = await buildTxReceipt(
+      { transactionHash: log.transactionHash, blockNumber: log.blockNumber },
+      from,
+      log.args.value as bigint,
+    );
+    results.push({ kind: isVault(from) ? 'withdrawn' : 'received', receipt });
   }
 
   return results.sort((a, b) =>

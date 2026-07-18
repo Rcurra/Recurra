@@ -8,15 +8,17 @@ export function GlassCard({
   hairline = false,
   className = '',
   style,
+  title,
   children,
 }: {
   hairline?: boolean;
   className?: string;
   style?: CSSProperties;
+  title?: string;
   children: ReactNode;
 }) {
   return (
-    <GlassPanel hairline={hairline} className={className} style={style}>
+    <GlassPanel hairline={hairline} className={className} style={style} title={title}>
       {children}
     </GlassPanel>
   );

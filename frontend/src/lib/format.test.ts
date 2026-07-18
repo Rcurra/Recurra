@@ -4,6 +4,7 @@ import {
   formatUSDC,
   intervalLabel,
   monthlyEquivalent,
+  runwayLabel,
   shortAddress,
   timeAgo,
   timeUntil,
@@ -29,6 +30,10 @@ describe('formatUSDC', () => {
   it('handles large escrows without float loss', () => {
     expect(formatUSDC(123_456_789_000_000n)).toBe('123456789.00');
   });
+  it('falls back to full precision for a real sub-cent amount (never a lying 0.00)', () => {
+    expect(formatUSDC(1_000n)).toBe('0.001');
+    expect(formatUSDC(1n)).toBe('0.000001');
+  });
 });
 
 describe('time words', () => {
@@ -41,7 +46,8 @@ describe('time words', () => {
   it('timeUntil: due now when past', () => {
     expect(timeUntil(new Date('2026-07-09T11:00:00Z'))).toBe('due now');
   });
-  it('timeUntil: minutes, then hours, then days', () => {
+  it('timeUntil: seconds, then minutes, then hours, then days', () => {
+    expect(timeUntil(new Date('2026-07-09T12:00:45Z'))).toBe('in 45 seconds');
     expect(timeUntil(new Date('2026-07-09T12:30:00Z'))).toBe('in 30 minutes');
     expect(timeUntil(new Date('2026-07-09T15:00:00Z'))).toBe('in 3 hours');
     expect(timeUntil(new Date('2026-07-14T12:00:00Z'))).toBe('in 5 days');
@@ -101,5 +107,30 @@ describe('monthlyEquivalent', () => {
 describe('shortAddress', () => {
   it('keeps the checksummed head and tail', () => {
     expect(shortAddress('0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC')).toBe('0x3C44…93BC');
+  });
+});
+
+describe('runwayLabel', () => {
+  it('is null with no balance yet', () => {
+    expect(runwayLabel(null, 10_000_000n)).toBeNull();
+  });
+  it('is null with nothing charging', () => {
+    expect(runwayLabel(100_000_000n, 0n)).toBeNull();
+  });
+  it('is null when underfunded, not a sentence', () => {
+    // regression: this used to return the string 'not enough for the next
+    // charge' — truthy, so VaultHero rendered "covers everything for not
+    // enough for the next charge" verbatim. Every caller must now treat
+    // this exactly like the other two null cases and supply its own copy.
+    expect(runwayLabel(1_000n, 10_000_000n)).toBeNull();
+  });
+  it('reports days under a month', () => {
+    expect(runwayLabel(5_000_000n, 10_000_000n)).toBe('15 days');
+  });
+  it('reports months plus remainder days', () => {
+    expect(runwayLabel(45_000_000n, 10_000_000n)).toBe('4 months 15 days');
+  });
+  it('singularizes one month, one day', () => {
+    expect(runwayLabel(31_000_000n, 30_000_000n)).toBe('1 month 1 day');
   });
 });

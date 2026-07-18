@@ -6,7 +6,14 @@ const USDC_DECIMALS = 1_000_000n;
 export function formatUSDC(amount: bigint): string {
   const whole = amount / USDC_DECIMALS;
   const cents = (amount % USDC_DECIMALS) / 10_000n; // 2 decimal places
-  return `${whole}.${cents.toString().padStart(2, '0')}`;
+  if (whole > 0n || cents > 0n || amount === 0n) {
+    return `${whole}.${cents.toString().padStart(2, '0')}`;
+  }
+  // A real, nonzero amount smaller than one cent (e.g. a fast/cheap demo
+  // plan) would otherwise round down to a lying "0.00" — fall back to full
+  // 6-decimal precision, trimmed, so a genuine charge never reads as none.
+  const fraction = (amount % USDC_DECIMALS).toString().padStart(6, '0').replace(/0+$/, '');
+  return `0.${fraction}`;
 }
 
 // The input-edge counterpart — a user-typed "10.5" into the smallest-unit
@@ -23,6 +30,15 @@ export function parseUSDC(input: string): bigint | null {
 // calling Date.now() directly in a render body (react-hooks/purity).
 export function isPastDue(date: Date): boolean {
   return date.getTime() <= Date.now();
+}
+
+// Same purity concern as isPastDue: whether a countdown needs its own
+// per-second clock instead of waiting for the next poll. Mirrors the < 60s
+// threshold where timeUntil switches from minutes to seconds — below that,
+// a 5s poll makes the seconds jump in choppy steps instead of counting down.
+export function isCountingDownSeconds(date: Date): boolean {
+  const ms = date.getTime() - Date.now();
+  return ms > 0 && ms < 60_000;
 }
 
 // "Coming up soon" — independent of whether the vault can cover it (that's
@@ -43,6 +59,8 @@ export function isUpcoming(nextPaymentDue: Date, intervalSecs: number): boolean 
 export function timeUntil(date: Date): string {
   const ms = date.getTime() - Date.now();
   if (ms <= 0) return 'due now';
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `in ${seconds} second${seconds === 1 ? '' : 's'}`;
   const minutes = Math.round(ms / 60_000);
   if (minutes < 60) return `in ${minutes} minute${minutes === 1 ? '' : 's'}`;
   const hours = Math.round(minutes / 60);
@@ -80,13 +98,20 @@ export function monthlyEquivalent(amount: bigint, intervalSecs: number): bigint 
   return (amount * 2_592_000n) / BigInt(Math.max(intervalSecs, 1));
 }
 
-// The runway sentence — balance ÷ 30-day-normalized commitments, spoken
-// in human time. Null when there's nothing to say (no balance yet, or no
-// active commitments to measure against). Display math only.
+// The runway DURATION, spoken in human time — balance ÷ 30-day-normalized
+// commitments. Null whenever there's no duration worth reporting: no
+// balance yet, no active commitments to measure against, OR underfunded
+// (< 1 day). That last case used to return the sentence "not enough for
+// the next charge" instead of null — a truthy string every caller then
+// had to know to special-case. Found live: VaultHero didn't, and wrapped
+// it verbatim in "covers everything for {runway}", producing "covers
+// everything for not enough for the next charge" for anyone underfunded.
+// Callers now decide their own underfunded copy from a plain null,
+// same as the other null cases — one contract, not a hidden second one.
 export function runwayLabel(balance: bigint | null, monthly: bigint): string | null {
   if (balance === null || monthly <= 0n) return null;
   const totalDays = Number((balance * 30n) / monthly);
-  if (totalDays < 1) return 'not enough for the next charge';
+  if (totalDays < 1) return null;
   const months = Math.floor(totalDays / 30);
   const days = totalDays % 30;
   if (months > 0) {
