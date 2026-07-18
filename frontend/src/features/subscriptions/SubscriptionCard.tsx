@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
-import { cycleProgress, formatUSDC, intervalLabel, shortAddress, timeUntil } from '@/lib/format';
+import { cycleProgress, formatUSDC, intervalLabel, isCountingDownSeconds, shortAddress, timeUntil } from '@/lib/format';
 import type { Plan, Subscription } from '@/types';
 
 // The card both Subscriptions and Discover render a subscription as — one
@@ -27,6 +28,19 @@ export function SubscriptionCard({
   unavailable?: boolean;
 }) {
   const progress = plan ? cycleProgress(sub.nextPaymentDue, plan.intervalSecs) : 0;
+
+  // Sub-minute countdowns need their own clock — the app's 5s poll would
+  // otherwise make the seconds jump in choppy steps instead of actually
+  // counting down. Only ticks while inside that window (never for a sub
+  // due in months), and stops itself the moment it's out of range.
+  const [, setTick] = useState(0);
+  const countingDownSeconds = sub.active && !unavailable && isCountingDownSeconds(sub.nextPaymentDue);
+
+  useEffect(() => {
+    if (!countingDownSeconds) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [countingDownSeconds]);
 
   return (
     <button onClick={onClick} aria-haspopup="dialog" className="block text-left">

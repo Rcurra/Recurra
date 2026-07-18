@@ -6,7 +6,14 @@ const USDC_DECIMALS = 1_000_000n;
 export function formatUSDC(amount: bigint): string {
   const whole = amount / USDC_DECIMALS;
   const cents = (amount % USDC_DECIMALS) / 10_000n; // 2 decimal places
-  return `${whole}.${cents.toString().padStart(2, '0')}`;
+  if (whole > 0n || cents > 0n || amount === 0n) {
+    return `${whole}.${cents.toString().padStart(2, '0')}`;
+  }
+  // A real, nonzero amount smaller than one cent (e.g. a fast/cheap demo
+  // plan) would otherwise round down to a lying "0.00" — fall back to full
+  // 6-decimal precision, trimmed, so a genuine charge never reads as none.
+  const fraction = (amount % USDC_DECIMALS).toString().padStart(6, '0').replace(/0+$/, '');
+  return `0.${fraction}`;
 }
 
 // The input-edge counterpart — a user-typed "10.5" into the smallest-unit
@@ -23,6 +30,15 @@ export function parseUSDC(input: string): bigint | null {
 // calling Date.now() directly in a render body (react-hooks/purity).
 export function isPastDue(date: Date): boolean {
   return date.getTime() <= Date.now();
+}
+
+// Same purity concern as isPastDue: whether a countdown needs its own
+// per-second clock instead of waiting for the next poll. Mirrors the < 60s
+// threshold where timeUntil switches from minutes to seconds — below that,
+// a 5s poll makes the seconds jump in choppy steps instead of counting down.
+export function isCountingDownSeconds(date: Date): boolean {
+  const ms = date.getTime() - Date.now();
+  return ms > 0 && ms < 60_000;
 }
 
 // "Coming up soon" — independent of whether the vault can cover it (that's
@@ -43,6 +59,8 @@ export function isUpcoming(nextPaymentDue: Date, intervalSecs: number): boolean 
 export function timeUntil(date: Date): string {
   const ms = date.getTime() - Date.now();
   if (ms <= 0) return 'due now';
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `in ${seconds} second${seconds === 1 ? '' : 's'}`;
   const minutes = Math.round(ms / 60_000);
   if (minutes < 60) return `in ${minutes} minute${minutes === 1 ? '' : 's'}`;
   const hours = Math.round(minutes / 60);

@@ -30,6 +30,10 @@ describe('formatUSDC', () => {
   it('handles large escrows without float loss', () => {
     expect(formatUSDC(123_456_789_000_000n)).toBe('123456789.00');
   });
+  it('falls back to full precision for a real sub-cent amount (never a lying 0.00)', () => {
+    expect(formatUSDC(1_000n)).toBe('0.001');
+    expect(formatUSDC(1n)).toBe('0.000001');
+  });
 });
 
 describe('time words', () => {
@@ -42,7 +46,8 @@ describe('time words', () => {
   it('timeUntil: due now when past', () => {
     expect(timeUntil(new Date('2026-07-09T11:00:00Z'))).toBe('due now');
   });
-  it('timeUntil: minutes, then hours, then days', () => {
+  it('timeUntil: seconds, then minutes, then hours, then days', () => {
+    expect(timeUntil(new Date('2026-07-09T12:00:45Z'))).toBe('in 45 seconds');
     expect(timeUntil(new Date('2026-07-09T12:30:00Z'))).toBe('in 30 minutes');
     expect(timeUntil(new Date('2026-07-09T15:00:00Z'))).toBe('in 3 hours');
     expect(timeUntil(new Date('2026-07-14T12:00:00Z'))).toBe('in 5 days');
