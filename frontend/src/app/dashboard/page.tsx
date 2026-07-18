@@ -9,6 +9,7 @@ import { api } from '@/services/api';
 import type { Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
+import { GlassPanel } from '@/components/GlassPanel';
 import { LoadingLine } from '@/components/LoadingLine';
 import { useChargeDetection } from '@/hooks/useChargeDetection';
 import {
@@ -23,6 +24,13 @@ import {
   timeUntil,
 } from '@/lib/format';
 import { getVaultBalance } from '@/lib/wallet';
+
+// White and black only (recurra-design-taste) — the two alert banners
+// still need to stand out from the rest of the glass, so the emphasis is
+// pure brightness/weight, never hue: underfunded runs a heavier white glow
+// than the calmer upcoming-charge one, same trick InlineError already
+// uses ("the alarm comes from structure, not hue").
+const ALERT_WHITE = '255, 255, 255';
 
 // Overview — the vault hero up top (balance, runway, the two permanent
 // actions), the Subscriptions list right below it as the one real "see
@@ -132,45 +140,73 @@ export default function OverviewPage() {
       {error && <p className="mb-4 text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
 
       {underfunded.length > 0 && (
-        <div
-          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-violet/40 bg-violet/10 px-5 py-4"
-          style={{ animation: 'fadeUp 0.7s ease both' }}
+        <GlassPanel
+          hairline
+          className="mb-6 flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+          style={{
+            animation: 'fadeUp 0.7s ease both',
+            background: `linear-gradient(160deg, rgba(${ALERT_WHITE}, 0.14), rgba(${ALERT_WHITE}, 0.05))`,
+            border: `1px solid rgba(${ALERT_WHITE}, 0.35)`,
+            boxShadow: `0 0 56px -10px rgba(${ALERT_WHITE}, 0.4), var(--glass-shadow)`,
+          }}
         >
-          <p className="text-sm text-ink">
-            {underfunded.length === 1 ? (
-              <>
-                Your{' '}
-                <span className="numeric">{formatUSDC(plans.get(underfunded[0].planId)!.amount)} USDC</span>{' '}
-                charge to {shortAddress(plans.get(underfunded[0].planId)!.merchant)}{' '}
-                is due, but your vault can&apos;t cover it yet — it&apos;ll go through as soon as you
-                add funds.
-              </>
-            ) : (
-              <>
-                {underfunded.length} of your subscriptions are due but your vault can&apos;t cover them yet
-                — they&apos;ll go through as soon as you add funds.
-              </>
-            )}
-          </p>
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-ink"
+              style={{
+                border: `1px solid rgba(${ALERT_WHITE}, 0.6)`,
+                boxShadow: `0 0 12px -1px rgba(${ALERT_WHITE}, 0.55)`,
+              }}
+            >
+              !
+            </span>
+            <p className="text-sm text-ink">
+              {underfunded.length === 1 ? (
+                <>
+                  Your{' '}
+                  <span className="numeric">{formatUSDC(plans.get(underfunded[0].planId)!.amount)} USDC</span>{' '}
+                  charge to {shortAddress(plans.get(underfunded[0].planId)!.merchant)}{' '}
+                  is due, but your vault can&apos;t cover it yet — it&apos;ll go through as soon as you
+                  add funds.
+                </>
+              ) : (
+                <>
+                  {underfunded.length} of your subscriptions are due but your vault can&apos;t cover them yet
+                  — they&apos;ll go through as soon as you add funds.
+                </>
+              )}
+            </p>
+          </div>
           <button
             onClick={() => setVaultOpen(true)}
-            className="numeric shrink-0 rounded-lg border border-violet/50 bg-violet/20 px-4 py-2 text-xs text-violet-light transition hover:bg-violet/30"
+            className="numeric shrink-0 rounded-lg bg-ink px-4 py-2 text-xs font-semibold text-canvas transition hover:shadow-[0_6px_24px_-8px_rgba(255,255,255,0.5)]"
           >
             + Add funds
           </button>
-        </div>
+        </GlassPanel>
       )}
 
       {upcoming.length > 0 && (
-        <div
-          className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-mint/30 bg-mint-deep/60 px-5 py-4"
-          style={{ animation: 'fadeUp 0.7s ease both' }}
+        <GlassPanel
+          className="mb-6 flex flex-wrap items-center gap-3 px-5 py-4"
+          style={{
+            animation: 'fadeUp 0.7s ease both',
+            background: `linear-gradient(160deg, rgba(${ALERT_WHITE}, 0.09), rgba(${ALERT_WHITE}, 0.03))`,
+            border: `1px solid rgba(${ALERT_WHITE}, 0.2)`,
+            boxShadow: `0 0 40px -14px rgba(${ALERT_WHITE}, 0.25), var(--glass-shadow)`,
+          }}
         >
-          <p className="text-sm text-ink">
+          <span
+            aria-hidden
+            className="breathe h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ background: `rgb(${ALERT_WHITE})`, boxShadow: `0 0 8px 1px rgba(${ALERT_WHITE}, 0.6)` }}
+          />
+          <p className="text-sm text-ink-muted">
             {upcoming.length === 1 ? (
               <>
                 Your{' '}
-                <span className="numeric">{formatUSDC(plans.get(upcoming[0].planId)!.amount)} USDC</span>{' '}
+                <span className="numeric text-ink">{formatUSDC(plans.get(upcoming[0].planId)!.amount)} USDC</span>{' '}
                 charge to {shortAddress(plans.get(upcoming[0].planId)!.merchant)}{' '}
                 is coming up {timeUntil(upcoming[0].nextPaymentDue)} — your vault has it covered.
               </>
@@ -180,7 +216,7 @@ export default function OverviewPage() {
               </>
             )}
           </p>
-        </div>
+        </GlassPanel>
       )}
 
       {/* ── the vault ─────────────────────────────────────────── */}
