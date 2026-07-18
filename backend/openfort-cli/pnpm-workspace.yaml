@@ -1,0 +1,19 @@
+# pnpm v11 moved onlyBuiltDependencies (formerly package.json's "pnpm"
+# field, no longer read) to allowBuilds here. Without @openfort/openfort-node
+# explicitly allowed, pnpm silently skips its native build script — that
+# package IS the actual Openfort signing SDK the CLI shells out to, so a
+# skipped build here means the vendored CLI looks installed but is broken,
+# only surfacing as a mysterious runtime failure, not an install error.
+#
+# packages: this directory is the only workspace member — not an actual
+# multi-package monorepo, just a single vendored install. Older pnpm (the
+# Docker image pins v9) requires this field whenever the file exists at
+# all; newer local pnpm (v11) tolerated its absence, which is why this
+# passed locally before failing in Docker.
+packages:
+  - '.'
+allowBuilds:
+  '@openfort/openfort-node': true
+  node: true
+  sharp: true
+  yarn: true

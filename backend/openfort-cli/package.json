@@ -4,13 +4,5 @@
   "description": "Vendored, pinned install of @openfort/cli — the backend shells out to node_modules/.bin/openfort from here (see ../src/openfort/mod.rs) instead of relying on npx to resolve it fresh on every process start.",
   "dependencies": {
     "@openfort/cli": "0.2.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@openfort/openfort-node",
-      "node",
-      "sharp",
-      "yarn"
-    ]
   }
 }
