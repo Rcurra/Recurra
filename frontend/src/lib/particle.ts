@@ -37,6 +37,8 @@ import {
   UNIVERSAL_ACCOUNT_VERSION,
   UniversalAccount,
   type EIP7702Authorization,
+  type ITransaction,
+  type IUATokenDelta,
   type IUATransactionDetail,
 } from '@particle-network/universal-account-sdk';
 import { getSigner, send7702SelfDelegation } from './magic';
@@ -119,23 +121,20 @@ export type RouteResult = {
   delegations: { chainId: number; txHash: string }[];
 };
 
-// Routes the user's own other-chain USDC to `receiver` on Arbitrum —
-// defaulting to their own address (same owner, same address, different
-// chain: 7702's "same address, new powers" trick). A different receiver
-// turns the same route into a withdrawal/payment: the solver's sourcing,
-// delegation, and fee mechanics are identical, only the final
-// transfer(receiver, amount) calldata changes. `amount` is USDC's
-// 6-decimal bigint, same convention as everywhere else in the app;
-// converted to the plain decimal string Particle's API wants only at
-// this call boundary.
-export async function routeToArbitrum(
-  ownerAddress: string,
-  amount: bigint,
-  receiver?: string,
-): Promise<RouteResult> {
-  const destination = (receiver ?? ownerAddress) as `0x${string}`;
-  const ua = buildUniversalAccount(ownerAddress);
+// The route is deliberately TWO exported steps — quoteRouteToArbitrum then
+// executeRoute — not one: the user's only approval is a personal_sign over
+// an opaque rootHash (they cannot read what it commits to), so the UI must
+// show them the quote's plan — what gets spent where, what it costs — and
+// get an explicit confirm BEFORE anything signs. Audit finding P-1/P-2
+// (2026-07-20); collapsing these back into one call reopens it.
 
+// `amount` is USDC's 6-decimal bigint, same convention as everywhere else
+// in the app; converted to the plain decimal string Particle's API wants
+// only at this call boundary. `destination` defaults to the owner (the
+// fund-the-vault flow); any other address turns the same route into a
+// withdrawal/payment — identical solver/delegation/fee mechanics, only the
+// final transfer(receiver, amount) calldata changes.
+function makeQuote(ua: UniversalAccount, destination: `0x${string}`, amount: bigint) {
   const whole = amount / 1_000_000n;
   const fraction = (amount % 1_000_000n).toString().padStart(6, '0');
   const amountDecimal = `${whole}.${fraction}`;
@@ -183,7 +182,101 @@ export async function routeToArbitrum(
       throw e;
     }
   };
-  let transaction = await quote();
+  return { amountDecimal, quote };
+}
+
+const opsNeedingAuth = (tx: ITransaction) =>
+  tx.userOps.filter((op) => op.eip7702Auth && !op.eip7702Delegated);
+
+// Both quote and detail responses carry token movements in the same
+// {token, amount, amountInUSD} hex-18-dec shape — one normalizer for both.
+function toDelta(d: IUATokenDelta): RouteTokenDelta {
+  return {
+    symbol: d.token.symbol ?? 'token',
+    chainId: d.token.chainId,
+    amount: hexAmountToNumber(d.amount),
+    usd: hexAmountToNumber(d.amountInUSD),
+  };
+}
+
+// gasFeeInUSD's wire format is unconfirmed (absent from the live probe) —
+// accept hex-18-dec or plain decimal, contribute 0 when absent/garbled.
+function usdField(value: string | undefined): number {
+  if (!value) return 0;
+  return value.startsWith('0x') ? hexAmountToNumber(value) : Number(value) || 0;
+}
+
+export type RouteQuoteSummary = {
+  /** "1.200000" — the exact decimal handed to Particle. */
+  amountDecimal: string;
+  /** Withdrawal target, or null when routing to the owner's own address. */
+  receiver: string | null;
+  /** Principal split per source chain (quote's tokenChanges.decr). */
+  sent: RouteTokenDelta[];
+  /** Estimated total fees in USD (per-op deductions + service + LP). */
+  feeUsd: number;
+  fromChains: number[];
+  /** Chains needing their one-time delegation before this route can run. */
+  needsSetup: number[];
+};
+
+export type PreparedRoute = {
+  summary: RouteQuoteSummary;
+  ownerAddress: string;
+  amount: bigint;
+  receiver?: string;
+  /** The quoted plan executeRoute starts from (requoted if setup runs). */
+  transaction: ITransaction;
+};
+
+// Step 1: quote only — read-only, signs nothing, safe to discard. Returns
+// everything the confirm card needs plus the plan executeRoute picks up.
+export async function quoteRouteToArbitrum(
+  ownerAddress: string,
+  amount: bigint,
+  receiver?: string,
+): Promise<PreparedRoute> {
+  const destination = (receiver ?? ownerAddress) as `0x${string}`;
+  const ua = buildUniversalAccount(ownerAddress);
+  const { amountDecimal, quote } = makeQuote(ua, destination, amount);
+  const transaction = await quote();
+
+  const feeUsd =
+    transaction.userOps.reduce(
+      (sum, op) =>
+        sum +
+        usdField(op.gasFeeInUSD) +
+        (op.feeDeductions ?? []).reduce((s, f) => s + hexAmountToNumber(f.amountInUSD), 0),
+      0,
+    ) +
+    hexAmountToNumber(transaction.transactionFees?.transactionServiceFeeAmountInUSD) +
+    hexAmountToNumber(transaction.transactionFees?.transactionLPFeeAmountInUSD);
+
+  return {
+    summary: {
+      amountDecimal,
+      receiver: receiver ?? null,
+      sent: (transaction.tokenChanges?.decr ?? []).map(toDelta),
+      feeUsd,
+      fromChains:
+        transaction.tokenChanges?.fromChains ?? [...new Set(transaction.userOps.map((op) => op.chainId))],
+      needsSetup: [...new Set(opsNeedingAuth(transaction).map((op) => op.chainId))],
+    },
+    ownerAddress,
+    amount,
+    receiver,
+    transaction,
+  };
+}
+
+// Step 2: execute a confirmed quote — delegation dance if needed, sign the
+// rootHash, send. The only function in this file that triggers signatures.
+export async function executeRoute(prepared: PreparedRoute): Promise<RouteResult> {
+  const { ownerAddress, amount, receiver } = prepared;
+  const destination = (receiver ?? ownerAddress) as `0x${string}`;
+  const ua = buildUniversalAccount(ownerAddress);
+  const { quote } = makeQuote(ua, destination, amount);
+  let transaction = prepared.transaction;
 
   // Every userOp on a chain this owner hasn't delegated on yet demands an
   // EIP-7702 authorization — and Particle asks for the CHAIN-AGNOSTIC one
@@ -202,8 +295,6 @@ export async function routeToArbitrum(
   //     ops eip7702Delegated — after which no authorization is needed.
   const signer = getSigner();
   if (!signer) throw new Error('Not logged in — no signer available');
-  const opsNeedingAuth = (tx: typeof transaction) =>
-    tx.userOps.filter((op) => op.eip7702Auth && !op.eip7702Delegated);
 
   const authorizations: EIP7702Authorization[] = [];
   const delegations: { chainId: number; txHash: string }[] = [];
@@ -359,13 +450,6 @@ export async function hydrateRouteReceipt(
     .filter((op) => op.txHash)
     .filter((op, i, all) => all.findIndex((o) => o.txHash === op.txHash) === i)
     .map((op) => ({ chainId: op.chainId, txHash: op.txHash }));
-
-  const toDelta = (d: { token: { symbol?: string; chainId: number }; amount: string; amountInUSD: string }): RouteTokenDelta => ({
-    symbol: d.token.symbol ?? 'token',
-    chainId: d.token.chainId,
-    amount: hexAmountToNumber(d.amount),
-    usd: hexAmountToNumber(d.amountInUSD),
-  });
 
   const totals = detail.fees?.totals;
   // "Service" from the user's seat = everything that isn't gas — Particle's

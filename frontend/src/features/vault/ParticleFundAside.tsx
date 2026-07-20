@@ -4,7 +4,14 @@ import { useEffect, useState } from 'react';
 import { isAddress } from 'viem';
 import { InlineError } from '@/components/InlineError';
 import { parseUSDC } from '@/lib/format';
-import { PARTICLE_ENABLED, getUnifiedBalance, hydrateRouteReceipt, routeToArbitrum } from '@/lib/particle';
+import {
+  PARTICLE_ENABLED,
+  executeRoute,
+  getUnifiedBalance,
+  hydrateRouteReceipt,
+  quoteRouteToArbitrum,
+  type PreparedRoute,
+} from '@/lib/particle';
 import {
   addReceipt,
   chainName,
@@ -26,6 +33,12 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
   const [checking, setChecking] = useState(false);
   const [amount, setAmount] = useState('');
   const [receiver, setReceiver] = useState('');
+  const [quoting, setQuoting] = useState(false);
+  // The quoted-but-unconfirmed route (audit P-1/P-2): while set, the
+  // confirm card is showing and nothing has been signed. Any edit to
+  // amount or destination clears it — a stale card must never be
+  // confirmable against different inputs.
+  const [prepared, setPrepared] = useState<PreparedRoute | null>(null);
   const [routing, setRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [receipts, setReceipts] = useState<RouteReceipt[]>([]);
@@ -111,27 +124,45 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
   const isWithdrawal =
     receiverTrimmed !== '' && address !== null && receiverTrimmed.toLowerCase() !== address.toLowerCase();
 
-  async function handleRoute() {
+  // Step 1: quote only — free, signs nothing. Puts the plan on screen.
+  async function handleReview() {
     if (!address || !receiverValid) return;
     const amountUnits = parseUSDC(amount);
     if (amountUnits === null || amountUnits <= 0n) return;
+    setQuoting(true);
+    setError(null);
+    try {
+      setPrepared(await quoteRouteToArbitrum(address, amountUnits, isWithdrawal ? receiverTrimmed : undefined));
+    } catch (e) {
+      console.error('ParticleFundAside: quote failed', e);
+      setError(walletErrorMessage(e));
+    } finally {
+      setQuoting(false);
+    }
+  }
+
+  // Step 2: the user has read the card and clicked Confirm — now sign.
+  async function handleConfirm() {
+    if (!address || !prepared) return;
     setRouting(true);
     setError(null);
     try {
-      const result = await routeToArbitrum(address, amountUnits, isWithdrawal ? receiverTrimmed : undefined);
+      const result = await executeRoute(prepared);
       if (result.transactionId) {
         const receipt: RouteReceipt = {
           transactionId: result.transactionId,
           createdAt: Date.now(),
-          amount: (Number(amountUnits) / 1e6).toString(),
-          receiver: isWithdrawal ? receiverTrimmed : undefined,
+          amount: (Number(prepared.amount) / 1e6).toString(),
+          receiver: prepared.receiver,
           status: 'pending',
-          fromChains: result.plannedChains.filter((c) => c !== 42161),
+          // Seeded from the confirmed quote so the receipt is readable
+          // immediately; hydration replaces these with executed actuals.
+          fromChains: prepared.summary.fromChains.filter((c) => c !== 42161),
           toChains: [42161],
-          feeUsd: null,
+          feeUsd: prepared.summary.feeUsd || null,
           feeGasUsd: null,
           feeServiceUsd: null,
-          sent: [],
+          sent: prepared.summary.sent,
           received: [],
           chainTxs: [],
           delegations: result.delegations,
@@ -140,6 +171,7 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
         setReceiptsOpen(true);
         void refreshReceipt(address, result.transactionId, 10);
       }
+      setPrepared(null);
       setAmount('');
       setReceiver('');
       onRouted();
@@ -181,6 +213,7 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
             value={amount}
             onChange={(e) => {
               setAmount(e.target.value);
+              setPrepared(null);
               if (error) setError(null);
             }}
             disabled={routing}
@@ -191,11 +224,11 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
           <span className="numeric shrink-0 text-xs text-ink-faint">USDC</span>
         </div>
         <button
-          onClick={handleRoute}
-          disabled={routing || !address || !receiverValid || !((parseUSDC(amount) ?? 0n) > 0n)}
+          onClick={handleReview}
+          disabled={quoting || routing || !address || !receiverValid || !((parseUSDC(amount) ?? 0n) > 0n)}
           className="shrink-0 rounded-xl border border-ink/30 bg-canvas/40 px-4 text-[11px] tracking-[0.08em] text-ink transition hover:border-ink/60 disabled:opacity-40"
         >
-          {routing ? 'Routing…' : isWithdrawal ? 'Withdraw' : 'Route to Arbitrum'}
+          {quoting ? 'Quoting…' : routing ? 'Routing…' : isWithdrawal ? 'Review withdrawal' : 'Review route'}
         </button>
       </div>
 
@@ -208,6 +241,7 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
           value={receiver}
           onChange={(e) => {
             setReceiver(e.target.value);
+            setPrepared(null);
             if (error) setError(null);
           }}
           disabled={routing}
@@ -220,6 +254,72 @@ export function ParticleFundAside({ address, onRouted }: { address: string | nul
         <p className="-mt-1 mb-2 text-[11px] text-ink-muted">
           That doesn&apos;t look like an EVM address (0x + 40 hex characters).
         </p>
+      )}
+
+      {/* ── the pre-sign confirmation (audit P-1/P-2): the rootHash the
+          user signs is unreadable, so THIS is where they see what the
+          plan actually does — spend what, from where, to whom, at what
+          cost — before any signature exists. ── */}
+      {prepared && (
+        <div className="mb-3 rounded-xl border border-ink/30 bg-canvas/60 px-4 py-3">
+          <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+            Confirm {prepared.summary.receiver ? 'withdrawal' : 'route'}
+          </p>
+          <div className="space-y-2">
+            <ReceiptLine label="Spending">
+              {(prepared.summary.sent.length > 0
+                ? prepared.summary.sent
+                : [{ symbol: 'USDC', chainId: 42161, amount: Number(prepared.summary.amountDecimal), usd: 0 }]
+              ).map((s) => (
+                <p key={`${s.chainId}-${s.symbol}`} className="numeric flex justify-between gap-2 text-[11px] text-ink">
+                  <span className="min-w-0 truncate">
+                    {formatTokenAmount(s.amount)} {s.symbol} · {chainName(s.chainId)}
+                  </span>
+                  {s.usd > 0 && <span className="shrink-0 text-ink-muted">${s.usd.toFixed(2)}</span>}
+                </p>
+              ))}
+            </ReceiptLine>
+            <ReceiptLine label="Delivering">
+              <p className="numeric text-[11px] text-ink">
+                {formatTokenAmount(Number(prepared.summary.amountDecimal))} USDC · Arbitrum One
+              </p>
+            </ReceiptLine>
+            {prepared.summary.receiver && (
+              <ReceiptLine label="To">
+                <p className="numeric break-all text-[11px] text-ink">{prepared.summary.receiver}</p>
+              </ReceiptLine>
+            )}
+            <ReceiptLine label="Est. fees">
+              <p className="numeric text-[11px] text-ink">
+                {prepared.summary.feeUsd > 0 ? `$${prepared.summary.feeUsd.toFixed(2)}` : 'under $0.01'}
+              </p>
+            </ReceiptLine>
+            {prepared.summary.needsSetup.length > 0 && (
+              <ReceiptLine label="First use">
+                <p className="text-[11px] text-ink-muted">
+                  One-time setup on {prepared.summary.needsSetup.map(chainName).join(', ')} — an extra
+                  signature per chain, gas paid from that chain&apos;s ETH. Never again after this.
+                </p>
+              </ReceiptLine>
+            )}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={handleConfirm}
+              disabled={routing}
+              className="flex-1 rounded-xl border border-ink/40 bg-canvas/40 px-4 py-2 text-[11px] tracking-[0.08em] text-ink transition hover:border-ink/70 disabled:opacity-40"
+            >
+              {routing ? 'Routing…' : 'Confirm & sign'}
+            </button>
+            <button
+              onClick={() => setPrepared(null)}
+              disabled={routing}
+              className="rounded-xl border border-line bg-canvas/40 px-4 py-2 text-[11px] tracking-[0.08em] text-ink-muted transition hover:border-ink/40 disabled:opacity-40"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {error && (

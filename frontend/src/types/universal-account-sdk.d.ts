@@ -86,12 +86,32 @@ declare module '@particle-network/universal-account-sdk' {
     userOpHash: string;
     eip7702Auth?: { chainId: number; nonce: number; address: string };
     eip7702Delegated?: boolean;
+    /** Fee this op will deduct, hex-18-dec amounts (live probe 2026-07-20). */
+    feeDeductions?: IUATokenDelta[];
+    gasFeeInUSD?: string;
   }
 
   export interface ITransaction {
     transactionId: string;
     rootHash: string;
     userOps: IUserOpWithChain[];
+    // Quote-side plan summary (live probe 2026-07-20): decr is the
+    // PRINCIPAL split per source chain — the two probed entries summed to
+    // exactly the requested amount; fees live in userOps[].feeDeductions
+    // and transactionFees, not here. No incr, no totalFeeInUSD on quotes.
+    tokenChanges: {
+      from?: string;
+      to?: string;
+      fromChains?: number[];
+      toChains?: number[];
+      decr?: IUATokenDelta[];
+    };
+    transactionFees?: {
+      freeGasFee: boolean;
+      freeServiceFee: boolean;
+      transactionServiceFeeAmountInUSD?: string;
+      transactionLPFeeAmountInUSD?: string;
+    };
   }
 
   export interface IAssetsResponse {
