@@ -57,6 +57,12 @@ pub struct AppState {
     /// work against the archive endpoint. `Arc` so clones of `AppState` share
     /// one cache; std `Mutex` since it's never held across an await.
     payments_cache: Arc<Mutex<PaymentsCache>>,
+    /// Block-number → timestamp, shared across all requests for the process
+    /// lifetime. Timestamps are immutable once a block exists, so this only
+    /// ever grows — and it's what keeps `fetch_payments` from refetching
+    /// hundreds of known blocks on every 30s payments-cache expiry (each
+    /// new charge adds ~1 genuinely new block per scan, not 250).
+    block_timestamps: Arc<Mutex<HashMap<u64, DateTime<Utc>>>>,
     /// Raw config, kept for the scheduler interval, vault address, etc.
     pub cfg: Config,
 }
@@ -257,6 +263,7 @@ impl AppState {
             sender,
             scheduler_enabled,
             payments_cache: Arc::new(Mutex::new(HashMap::new())),
+            block_timestamps: Arc::new(Mutex::new(HashMap::new())),
             cfg,
         })
     }
@@ -439,11 +446,76 @@ impl AppState {
                 AppError::Chain(format!("failed to scan PaymentExecuted logs: {e}"))
             })?;
 
-        // Multiple payments can land in the same block; cache the lookup so a
-        // busy block only costs one extra RPC round trip, not one per event.
-        let mut block_timestamps: HashMap<u64, DateTime<Utc>> = HashMap::new();
-        let mut payments = Vec::with_capacity(logs.len());
+        // Multiple payments can land in the same block; one lookup per
+        // unique block, and the lookups go out CONCURRENTLY (capped at 16 so
+        // the RPC doesn't read it as a flood). Found live 2026-07-20: the
+        // serial version cost one round trip per payment — ~80s at ~250
+        // payments, past the Next proxy's 30s timeout, so every 30s cache
+        // expiry surfaced in the receipts UI as HTTP 500.
+        //
+        // Found live 2026-07-15: Arbitrum's own Sepolia RPC includes
+        // `blockTimestamp` in getLogs responses but sets it to a literal
+        // `0x0` rather than omitting the field — a real zero, not a
+        // sentinel for "not provided". Treat it the same as absent
+        // rather than trusting it, since 0 is never a genuine Sepolia
+        // block timestamp.
+        let has_real_timestamp =
+            |log: &alloy::rpc::types::Log| matches!(log.block_timestamp, Some(ts) if ts != 0);
 
+        let mut blocks_needing_lookup: Vec<u64> = {
+            let known = self.block_timestamps.lock().unwrap();
+            logs.iter()
+                .filter(|(_, log)| !has_real_timestamp(log))
+                .filter_map(|(_, log)| log.block_number)
+                .filter(|bn| !known.contains_key(bn))
+                .collect()
+        };
+        blocks_needing_lookup.sort_unstable();
+        blocks_needing_lookup.dedup();
+
+        // 4 concurrent, 5 attempts with linear backoff — sized to what the
+        // official endpoint actually tolerates (16 concurrent drew instant
+        // HTTP 429s, found live 2026-07-20, five minutes after the serial
+        // version was fixed for being too slow; this is the middle).
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(4));
+        let mut lookups = tokio::task::JoinSet::new();
+        for block_number in blocks_needing_lookup {
+            let provider = logs_provider.clone();
+            let semaphore = Arc::clone(&semaphore);
+            lookups.spawn(async move {
+                let _permit = semaphore.acquire_owned().await;
+                let mut last_err = String::new();
+                for attempt in 1..=5u32 {
+                    match provider
+                        .get_block_by_number(BlockNumberOrTag::Number(block_number))
+                        .await
+                    {
+                        Ok(Some(block)) => return (block_number, Ok(block.header.timestamp)),
+                        Ok(None) => {
+                            return (block_number, Err(format!("block {block_number} not found")));
+                        }
+                        Err(e) => last_err = e.to_string(),
+                    }
+                    tokio::time::sleep(Duration::from_millis(400 * u64::from(attempt))).await;
+                }
+                (block_number, Err(last_err))
+            });
+        }
+        while let Some(joined) = lookups.join_next().await {
+            let (block_number, result) = joined
+                .map_err(|e| AppError::Chain(format!("block lookup task failed: {e}")))?;
+            let ts = result.map_err(|e| {
+                AppError::Chain(format!("failed to fetch block {block_number}: {e}"))
+            })?;
+            let ts = DateTime::from_timestamp(ts as i64, 0).unwrap_or_else(Utc::now);
+            self.block_timestamps.lock().unwrap().insert(block_number, ts);
+        }
+
+        // Snapshot for the mapping loop below — everything it needs is in
+        // the shared cache now (this scan's inserts plus prior scans').
+        let block_timestamps = self.block_timestamps.lock().unwrap().clone();
+
+        let mut payments = Vec::with_capacity(logs.len());
         for (decoded, log) in logs {
             let block_number = log.block_number.unwrap_or_default();
             let tx_hash = log
@@ -451,36 +523,16 @@ impl AppState {
                 .map(|h| h.to_string())
                 .unwrap_or_default();
 
-            // Found live 2026-07-15: Arbitrum's own Sepolia RPC includes
-            // `blockTimestamp` in getLogs responses but sets it to a literal
-            // `0x0` rather than omitting the field — a real zero, not a
-            // sentinel for "not provided". Treat it the same as absent
-            // rather than trusting it, since 0 is never a genuine Sepolia
-            // block timestamp.
-            let timestamp = match log.block_timestamp {
-                Some(ts) if ts != 0 => {
-                    DateTime::from_timestamp(ts as i64, 0).unwrap_or_else(Utc::now)
-                }
-                _ => match block_timestamps.get(&block_number) {
-                    Some(cached) => *cached,
-                    None => {
-                        let block = logs_provider
-                            .get_block_by_number(BlockNumberOrTag::Number(block_number))
-                            .await
-                            .map_err(|e| {
-                                AppError::Chain(format!(
-                                    "failed to fetch block {block_number}: {e}"
-                                ))
-                            })?
-                            .ok_or_else(|| {
-                                AppError::Chain(format!("block {block_number} not found"))
-                            })?;
-                        let ts = DateTime::from_timestamp(block.header.timestamp as i64, 0)
-                            .unwrap_or_else(Utc::now);
-                        block_timestamps.insert(block_number, ts);
-                        ts
-                    }
-                },
+            let timestamp = if has_real_timestamp(&log) {
+                DateTime::from_timestamp(log.block_timestamp.unwrap_or_default() as i64, 0)
+                    .unwrap_or_else(Utc::now)
+            } else {
+                // Missing from the prefetch only when the log itself had no
+                // block number — nothing sane to show; "now" beats a panic.
+                block_timestamps
+                    .get(&block_number)
+                    .copied()
+                    .unwrap_or_else(Utc::now)
             };
 
             payments.push(map_payment(
