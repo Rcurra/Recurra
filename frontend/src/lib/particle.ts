@@ -334,17 +334,26 @@ export async function executeRoute(prepared: PreparedRoute): Promise<RouteResult
       const chainIds = [...new Set(pending.map((op) => op.chainId))];
       const auths = await ua.getEIP7702Auth(chainIds);
       for (let i = 0; i < chainIds.length; i++) {
-        // `||`, not `??`: getEIP7702Auth reports chainId 0 (chain-agnostic)
-        // on its entries — zero must fall back to the concrete chain we
-        // asked about, or Magic gets switchChain(0) (-32602, found live).
-        const chainId = auths[i]?.chainId || chainIds[i];
+        // Match the auth entry to its chain by chainId when the entry
+        // names one; position only as the fallback (audit P-5 — the
+        // response's order isn't contractual, and a mismatched pairing
+        // would sign the wrong nonce for the wrong chain). Entries often
+        // report chainId 0 (chain-agnostic), which is also why the
+        // switchChain target below uses `||`, not `??`: zero must fall
+        // back to the concrete chain, or Magic gets switchChain(0)
+        // (-32602, found live).
+        const auth = auths.find((a) => a.chainId === chainIds[i]) ?? auths[i];
+        if (!auth) {
+          throw new Error(`getEIP7702Auth returned no entry for chain ${chainIds[i]}`);
+        }
+        const chainId = auth.chainId || chainIds[i];
         const { transactionHash } = await send7702SelfDelegation({
           ownerAddress: ownerAddress as `0x${string}`,
           chainId,
-          contractAddress: auths[i].address as `0x${string}`,
+          contractAddress: auth.address as `0x${string}`,
           // +1: the self-tx consumes the current nonce first (see
           // send7702SelfDelegation).
-          nonce: auths[i].nonce + 1,
+          nonce: auth.nonce + 1,
         });
         console.info('routeToArbitrum: pre-delegated', { chainId, transactionHash });
         delegations.push({ chainId, txHash: transactionHash });

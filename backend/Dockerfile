@@ -30,7 +30,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libs
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo build --release
+# --locked: build exactly the committed Cargo.lock or fail loudly --
+# never silently resolve fresh dependency versions inside the image.
+RUN cargo build --release --locked
 
 # ---- Stage 3: runtime ----
 # Node stays present here (not build-essential) -- the installed CLI is
@@ -43,7 +45,12 @@ FROM node:20-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=rust-build /app/target/release/backend ./backend
-COPY --from=openfort-cli-deps /app/openfort-cli ./openfort-cli
+COPY --from=rust-build --chown=node:node /app/target/release/backend ./backend
+COPY --from=openfort-cli-deps --chown=node:node /app/openfort-cli ./openfort-cli
+# Non-root (audit D-1, 2026-07-20): this container holds Openfort wallet
+# secrets in env and shells out to a Node CLI -- neither process needs
+# root, so neither gets it. `node` is the base image's built-in uid-1000
+# user; port 3001 is unprivileged, so nothing else changes.
+USER node
 EXPOSE 3001
 CMD ["./backend"]
