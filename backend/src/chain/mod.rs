@@ -502,13 +502,16 @@ impl AppState {
             });
         }
         while let Some(joined) = lookups.join_next().await {
-            let (block_number, result) = joined
-                .map_err(|e| AppError::Chain(format!("block lookup task failed: {e}")))?;
+            let (block_number, result) =
+                joined.map_err(|e| AppError::Chain(format!("block lookup task failed: {e}")))?;
             let ts = result.map_err(|e| {
                 AppError::Chain(format!("failed to fetch block {block_number}: {e}"))
             })?;
             let ts = DateTime::from_timestamp(ts as i64, 0).unwrap_or_else(Utc::now);
-            self.block_timestamps.lock().unwrap().insert(block_number, ts);
+            self.block_timestamps
+                .lock()
+                .unwrap()
+                .insert(block_number, ts);
         }
 
         // Snapshot for the mapping loop below — everything it needs is in
