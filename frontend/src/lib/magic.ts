@@ -14,10 +14,15 @@
 //
 // EIP-7702 signing (F4) is core magic-sdk (`magic.wallet.sign7702Authorization`
 // / `send7702Transaction`) — NOT something @magic-ext/evm provides. That
-// extension only adds multi-chain switching (`magic.evm.switchChain`), which
-// this single-network app doesn't need, so it stays uninstalled-from-code
-// (installed in package.json, per the original F1 scope note, but unused).
+// extension adds multi-chain switching (`magic.evm.switchChain`), which F6
+// made load-bearing: Magic signs 7702 authorizations against its CONNECTED
+// chain and errors (-32603 "Error signing", found live 2026-07-19) when
+// asked to sign for a chain it isn't on — so Particle's source/destination
+// mainnet auths (Base, Arbitrum One) each need a switch-sign-switch-back
+// dance, the exact pattern Particle's own Magic demo
+// (Particle-Network/ua-7702-magic-demo) uses.
 
+import { EVMExtension } from '@magic-ext/evm';
 import { Magic } from 'magic-sdk';
 import { createWalletClient, custom, http, type EIP1193Provider, type WalletClient } from 'viem';
 import { privateKeyToAccount, type LocalAccount } from 'viem/accounts';
@@ -45,21 +50,38 @@ if (isDevWallet && process.env.NODE_ENV === 'production') {
 export type Session = { address: string; email: string | null };
 
 let walletClient: WalletClient | null = null;
-let magicInstance: Magic | null = null;
+let magicInstance: MagicClient | null = null;
 
 // Constructed lazily — only on the real-Magic path, on first use — so the
 // placeholder NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY never gets touched while
 // NEXT_PUBLIC_DEV_WALLET=1.
-function getMagic(): Magic {
+function buildMagic(key: string) {
+  const chain = getChain();
+  return new Magic(key, {
+    network: { rpcUrl: chain.rpcUrls.default.http[0], chainId: chain.id },
+    // Every chain sign7702Authorization may switchChain to: the app chain
+    // (default — everything except UA auth signing stays here) plus the
+    // mainnet chains Particle UA quotes span today (source Base,
+    // destination Arbitrum One). switchChain refuses chains not listed, so
+    // extend this list if the UA's funds ever sit on ETH/BSC/XLayer.
+    extensions: [
+      new EVMExtension([
+        { rpcUrl: chain.rpcUrls.default.http[0], chainId: chain.id, default: true },
+        { rpcUrl: 'https://mainnet.base.org', chainId: 8453 },
+        { rpcUrl: 'https://arb1.arbitrum.io/rpc', chainId: 42161 },
+      ]),
+    ],
+  });
+}
+type MagicClient = ReturnType<typeof buildMagic>;
+
+function getMagic(): MagicClient {
   if (!magicInstance) {
     const key = process.env.NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY;
     if (!key || key === 'pk_live_...') {
       throw new Error('NEXT_PUBLIC_MAGIC_PUBLISHABLE_KEY is not set — add a real key or set NEXT_PUBLIC_DEV_WALLET=1');
     }
-    const chain = getChain();
-    magicInstance = new Magic(key, {
-      network: { rpcUrl: chain.rpcUrls.default.http[0], chainId: chain.id },
-    });
+    magicInstance = buildMagic(key);
   }
   return magicInstance;
 }
@@ -86,7 +108,7 @@ async function loginDev(email: string): Promise<Session> {
 // doesn't typecheck against what's actually installed). `email` comes from
 // the same call — Magic's own verified record, not whatever was typed into
 // the form, so it's trustworthy to display even on session restore.
-async function getMagicSession(magic: Magic): Promise<Session | null> {
+async function getMagicSession(magic: MagicClient): Promise<Session | null> {
   const { email, wallets } = await magic.user.getInfo();
   const address = wallets.ethereum?.publicAddress;
   return address ? { address, email: email ?? null } : null;
@@ -223,7 +245,16 @@ export function getSigner(): RecurraSigner | null {
 // chainId is always the real chain, never 0 ("universal" cross-chain) —
 // Arbitrum's 7702 delegation slot belongs to ZeroDev's Kernel specifically,
 // not shared across chains (see CONCEPT.md's delegation-collision note).
-export async function sign7702Authorization(params: { contractAddress: `0x${string}`; chainId: number }): Promise<{
+//
+// `nonce` is optional and passed straight through to Magic (its SDK types
+// document it) — Particle's userOps specify the exact nonce each auth must
+// be signed at, so the UA path always provides it; the Kernel path (F4)
+// keeps omitting it and Magic derives its own, unchanged.
+export async function sign7702Authorization(params: {
+  contractAddress: `0x${string}`;
+  chainId: number;
+  nonce?: number;
+}): Promise<{
   address: `0x${string}`;
   chainId: number;
   nonce: number;
@@ -234,7 +265,20 @@ export async function sign7702Authorization(params: { contractAddress: `0x${stri
   if (isDevWallet) {
     throw new Error('sign7702Authorization is Magic-only — dev-wallet mode signs its own authorization');
   }
-  const auth = await getMagic().wallet.sign7702Authorization(params);
+  const magic = getMagic();
+  // Magic signs against its connected chain and rejects a mismatched
+  // chainId outright (-32603 "Error signing"), so hop to the target chain
+  // for the signature — and always hop back, even on failure: the rest of
+  // the app (vault, Kernel path) assumes Magic stays on the app chain.
+  const appChainId = getChain().id;
+  const needsSwitch = params.chainId !== appChainId;
+  if (needsSwitch) await magic.evm.switchChain(params.chainId);
+  let auth;
+  try {
+    auth = await magic.wallet.sign7702Authorization(params);
+  } finally {
+    if (needsSwitch) await magic.evm.switchChain(appChainId);
+  }
   // Normalizes either convention to a clean 0/1: legacy v (27/28) offsets
   // by 27; anything already 0/1 passes through untouched.
   const yParity = auth.v === 27 || auth.v === 0 ? 0 : 1;
@@ -246,4 +290,51 @@ export async function sign7702Authorization(params: { contractAddress: `0x${stri
     s: auth.s as `0x${string}`,
     yParity,
   };
+}
+
+// Installs an EIP-7702 delegation on `chainId` with a Type-4 SELF-transaction
+// (to: own address, empty calldata, the signed authorization riding along) —
+// Particle UA's pre-delegation step for wallets that can't sign the
+// chain-agnostic (chainId 0) authorization Particle asks for inline. Magic is
+// such a wallet: handing per-chain signatures back inline gets the whole
+// userOp bundle rejected with AA24 (found live 2026-07-19), so delegation has
+// to be installed on-chain FIRST, after which Particle's quotes come back
+// eip7702Delegated and need no authorization at all. Pattern verbatim from
+// Particle-Network/ua-7702-magic-demo's ensureDelegated.
+//
+// `nonce` must be the value Particle's getEIP7702Auth reports PLUS ONE: the
+// Type-4 tx itself spends the account's current nonce, so the authorization
+// tucked inside it is validated against the next one.
+//
+// Magic's raw authorization response goes straight into send7702Transaction —
+// its own wire shape (v, not yParity), no viem normalization wanted here.
+// The EOA pays that chain's gas: this is the one step that needs a little
+// native ETH on the delegating chain.
+export async function send7702SelfDelegation(params: {
+  ownerAddress: `0x${string}`;
+  chainId: number;
+  contractAddress: `0x${string}`;
+  nonce: number;
+}): Promise<{ transactionHash: string }> {
+  if (isDevWallet) {
+    throw new Error('send7702SelfDelegation is Magic-only — dev-wallet mode signs Particle auths inline');
+  }
+  const magic = getMagic();
+  const appChainId = getChain().id;
+  await magic.evm.switchChain(params.chainId);
+  try {
+    const authorization = await magic.wallet.sign7702Authorization({
+      contractAddress: params.contractAddress,
+      chainId: params.chainId,
+      nonce: params.nonce,
+    });
+    const { transactionHash } = await magic.wallet.send7702Transaction({
+      to: params.ownerAddress,
+      data: '0x',
+      authorizationList: [authorization],
+    });
+    return { transactionHash };
+  } finally {
+    await magic.evm.switchChain(appChainId);
+  }
 }
