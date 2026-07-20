@@ -1,0 +1,37 @@
+# Fly.io config for the Recurra backend (see Dockerfile for why this is a
+# long-lived Machine, not serverless: the scheduler is a persistent tokio
+# loop and must never be auto-stopped between requests).
+
+app = "recurra-backend"
+primary_region = "lhr"
+
+# Non-secret config lives here so the deploy is reproducible from the repo;
+# OPENFORT_SECRET_KEY / OPENFORT_WALLET_SECRET / OPENFORT_PUBLISHABLE_KEY
+# are set via `fly secrets set`, never committed.
+[env]
+  PORT = "3001"
+  # Arbitrum's own endpoint, NOT publicnode -- publicnode intermittently
+  # drops requests under load (scheduler tick errors + /payments 500s,
+  # found live 2026-07-20), the same weakness frontend/src/lib/receipts.ts
+  # documents for wide getLogs.
+  ARBITRUM_RPC = "https://sepolia-rollup.arbitrum.io/rpc"
+  SUBSCRIPTION_REGISTRY_ADDRESS = "0x33C7E0D2d9da4eF91de1C99Cfd33692e640DfD0E"
+  SUBSCRIPTION_VAULT_ADDRESS = "0xD34EcB5E7e434b3bf3a2cf351D2266D038aC22Ad"
+  EXECUTOR_ADDRESS = "0x4143E9ACbb4ba2DF5eD64963B379D63D51Adc1eA"
+  EXECUTOR_DEPLOY_BLOCK = "287458272"
+  SCHEDULER_INTERVAL_SECS = "60"
+  OPENFORT_WALLET_ADDRESS = "0x9054682901af7903874742ed57c0d51BcD2906C1"
+  OPENFORT_ACCOUNT_ID = "acc_108574b6-df5d-471b-96ad-0c9f7291ffbb"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # Both must stay off/1: a stopped machine means no scheduler ticks and
+  # silently missed charges — the exact failure mode every free tier had.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
