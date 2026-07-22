@@ -24,6 +24,19 @@ pub struct Subscription {
     pub active: bool,
 }
 
+/// Surfaced at `GET /status` so the dashboard (and the pre-subscribe
+/// confirmation) can warn users *before* they hit a silent failure: when the
+/// scheduler's last real submit failed on a recognized, systemic cause (the
+/// Openfort operations-quota block hit live 2026-07-22), `degraded` flips on
+/// and `message` carries copy safe to show directly — never the raw
+/// CLI/RPC error text, which can carry account IDs or infra detail.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PaymentHealth {
+    pub degraded: bool,
+    pub message: Option<String>,
+    pub since: Option<DateTime<Utc>>,
+}
+
 /// One historical `PaymentExecuted` event — the record `GET /api/payments`
 /// serves. Mirrors the frontend's `TxReceipt` shape closely enough that F5's
 /// Activity screen can render it through the same `TxReceiptCard`/

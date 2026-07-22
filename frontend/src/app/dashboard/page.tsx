@@ -6,7 +6,7 @@ import { useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
 import { VaultHero, VaultModal } from '@/features/vault';
 import { api } from '@/services/api';
-import type { Plan } from '@/types';
+import type { PaymentHealth, Plan } from '@/types';
 import { CadenceRing } from '@/components/CadenceRing';
 import { GlassCard } from '@/components/GlassCard';
 import { GlassPanel } from '@/components/GlassPanel';
@@ -38,6 +38,7 @@ const ALERT_WHITE = '255, 255, 255';
 export default function OverviewPage() {
   const { address } = useAuth();
   const [plans, setPlans] = useState<Map<number, Plan>>(new Map());
+  const [paymentHealth, setPaymentHealth] = useState<PaymentHealth | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
   const [vaultBalance, setVaultBalance] = useState<bigint | null>(null);
   const [balanceNonce, setBalanceNonce] = useState(0);
@@ -50,6 +51,17 @@ export default function OverviewPage() {
       .list()
       .then((list) => setPlans(new Map(list.map((p) => [p.id, p]))))
       .catch(() => {}); // panels degrade gracefully without plan detail
+  }, []);
+
+  // Whether the scheduler's real charges are currently blocked on a systemic
+  // cause (e.g. the payments provider's plan/quota limit) — polled slowly
+  // since this changes on the order of hours, not seconds, unlike the vault
+  // balance poll below.
+  useEffect(() => {
+    const check = () => api.status.get().then(setPaymentHealth).catch(() => {});
+    check();
+    const id = setInterval(check, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -138,6 +150,31 @@ export default function OverviewPage() {
   return (
     <div className="mx-auto max-w-4xl px-6 pt-12 pb-16">
       {error && <p className="mb-4 text-sm text-danger" style={{ animation: 'fadeUp 0.7s ease both' }}>{error}</p>}
+
+      {paymentHealth?.degraded && (
+        <GlassPanel
+          hairline
+          className="mb-6 flex items-center gap-3 px-5 py-4"
+          style={{
+            animation: 'fadeUp 0.7s ease both',
+            background: `linear-gradient(160deg, rgba(${ALERT_WHITE}, 0.16), rgba(${ALERT_WHITE}, 0.06))`,
+            border: `1px solid rgba(${ALERT_WHITE}, 0.4)`,
+            boxShadow: `0 0 56px -10px rgba(${ALERT_WHITE}, 0.45), var(--glass-shadow)`,
+          }}
+        >
+          <span
+            aria-hidden
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-ink"
+            style={{
+              border: `1px solid rgba(${ALERT_WHITE}, 0.6)`,
+              boxShadow: `0 0 12px -1px rgba(${ALERT_WHITE}, 0.55)`,
+            }}
+          >
+            !
+          </span>
+          <p className="text-sm text-ink">{paymentHealth.message}</p>
+        </GlassPanel>
+      )}
 
       {underfunded.length > 0 && (
         <GlassPanel

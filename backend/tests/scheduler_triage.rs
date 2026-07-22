@@ -34,7 +34,7 @@ use alloy::sol;
 use backend::chain::AppState;
 use backend::config::Config;
 use backend::models::Subscription;
-use backend::scheduler::process_subscriptions;
+use backend::scheduler::{SubmitBackoff, process_subscriptions};
 
 // Foundry's well-known test mnemonic, accounts #0 and #1 — public by
 // definition, the same keys every fresh anvil unlocks.
@@ -239,6 +239,8 @@ async fn scheduler_triage_against_anvil() {
         "signer == authorizedExecutor, boot check should pass"
     );
 
+    let mut backoff = SubmitBackoff::default();
+
     let vault_balance = || async {
         vault_s
             .balances(subscriber_addr, usdc_addr)
@@ -253,7 +255,7 @@ async fn scheduler_triage_against_anvil() {
     assert_eq!(due.len(), 4, "all four seeded subs start due");
     let merchant_before = merchant_usdc().await;
 
-    process_subscriptions(&state, stale_entry(&due, 1))
+    process_subscriptions(&state, stale_entry(&due, 1), &mut backoff)
         .await
         .unwrap();
 
@@ -284,7 +286,9 @@ async fn scheduler_triage_against_anvil() {
         .unwrap();
     assert_eq!(vault_balance().await, U256::from(30_000_000u64));
 
-    process_subscriptions(&state, stale).await.unwrap();
+    process_subscriptions(&state, stale, &mut backoff)
+        .await
+        .unwrap();
 
     assert_eq!(
         vault_balance().await,
@@ -304,7 +308,9 @@ async fn scheduler_triage_against_anvil() {
         .await
         .unwrap();
 
-    process_subscriptions(&state, stale).await.unwrap();
+    process_subscriptions(&state, stale, &mut backoff)
+        .await
+        .unwrap();
 
     assert_eq!(
         vault_balance().await,
@@ -328,7 +334,9 @@ async fn scheduler_triage_against_anvil() {
     assert_eq!(vault_balance().await, U256::ZERO);
     let merchant_before = merchant_usdc().await;
 
-    process_subscriptions(&state, stale).await.unwrap();
+    process_subscriptions(&state, stale, &mut backoff)
+        .await
+        .unwrap();
 
     assert_eq!(merchant_usdc().await, merchant_before, "nothing moved");
     let due_after = state.fetch_due_subscriptions().await.unwrap();

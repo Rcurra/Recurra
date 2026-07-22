@@ -28,6 +28,15 @@ export interface Payment {
   timestamp: Date;
 }
 
+// GET /status — whether the scheduler's real charges are currently blocked
+// on a systemic cause (e.g. the payments provider's plan/quota limit).
+// `message` is pre-written, user-safe copy; render it as-is.
+export interface PaymentHealth {
+  degraded: boolean;
+  message: string | null;
+  since: Date | null;
+}
+
 export interface Subscription {
   id: number;
   planId: number;

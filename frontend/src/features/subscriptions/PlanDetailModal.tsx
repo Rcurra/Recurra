@@ -7,7 +7,7 @@ import { InlineError } from '@/components/InlineError';
 import { MerchantMark } from '@/components/MerchantMark';
 import { TxReceiptCard } from '@/components/TxReceiptCard';
 import { useAuth } from '@/features/auth';
-import type { Plan } from '@/types';
+import type { PaymentHealth, Plan } from '@/types';
 import { formatUSDC, intervalLabel, monthlyEquivalent, shortAddress } from '@/lib/format';
 import { walletErrorMessage, type TxReceipt } from '@/lib/wallet';
 import { subscribeAndFund } from '@/lib/zerodev';
@@ -26,10 +26,12 @@ type Phase = 'idle' | 'signing' | 'done' | 'error';
 // one signature now, not a step counter standing in for three.
 export function PlanDetailModal({
   plan,
+  paymentHealth,
   onClose,
   onSubscribed,
 }: {
   plan: Plan | null;
+  paymentHealth?: PaymentHealth | null;
   onClose: () => void;
   onSubscribed?: () => void;
 }) {
@@ -50,15 +52,25 @@ export function PlanDetailModal({
 
   // Keyed by plan id so all of this resets on a fresh plan instead of a
   // set-state-in-effect to clear it.
-  return <PlanDetailContent key={plan.id} plan={plan} onClose={onClose} onSubscribed={onSubscribed} />;
+  return (
+    <PlanDetailContent
+      key={plan.id}
+      plan={plan}
+      paymentHealth={paymentHealth}
+      onClose={onClose}
+      onSubscribed={onSubscribed}
+    />
+  );
 }
 
 function PlanDetailContent({
   plan,
+  paymentHealth,
   onClose,
   onSubscribed,
 }: {
   plan: Plan;
+  paymentHealth?: PaymentHealth | null;
   onClose: () => void;
   onSubscribed?: () => void;
 }) {
@@ -236,6 +248,27 @@ function PlanDetailContent({
                   {intervalLabel(plan.intervalSecs)} to {shortAddress(plan.merchant)}.
                 </p>
               </div>
+
+              {paymentHealth?.degraded && (
+                <div
+                  className="mt-4 flex items-start gap-2.5 rounded-xl border px-4 py-3"
+                  style={{
+                    background: 'linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03))',
+                    borderColor: 'rgba(255, 255, 255, 0.3)',
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-ink"
+                    style={{ border: '1px solid rgba(255, 255, 255, 0.5)' }}
+                  >
+                    !
+                  </span>
+                  <p className="text-[11px] font-light leading-relaxed text-ink-muted">
+                    {paymentHealth.message}
+                  </p>
+                </div>
+              )}
 
               {/* ── the one action ── */}
               <div className="mt-5 flex flex-col gap-2">

@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { PlanDetailModal, SubDetailModal, useSubscriptions } from '@/features/subscriptions';
 import { useAuth } from '@/features/auth';
 import { api } from '@/services/api';
-import type { Plan, Subscription } from '@/types';
+import type { PaymentHealth, Plan, Subscription } from '@/types';
 import { GlassPanel } from '@/components/GlassPanel';
 import { LoadingLine } from '@/components/LoadingLine';
 import { MerchantMark } from '@/components/MerchantMark';
@@ -141,6 +142,7 @@ export default function DiscoverPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [selectedSub, setSelectedSub] = useState<Subscription | null>(null);
+  const [paymentHealth, setPaymentHealth] = useState<PaymentHealth | null>(null);
 
   const { subscriptions, refetch } = useSubscriptions(address);
   const subscribedPlanIds = new Set(subscriptions.filter((s) => s.active).map((s) => s.planId));
@@ -151,6 +153,15 @@ export default function DiscoverPage() {
       .then(setPlans)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
+  }, []);
+
+  // So the subscribe confirmation can warn *before* the signature, not after
+  // a silent missed charge — same status the Overview banner reads.
+  useEffect(() => {
+    api.status
+      .get()
+      .then(setPaymentHealth)
+      .catch(() => {});
   }, []);
 
   // 1 — yours: active subscriptions, paired with their plan.
@@ -196,6 +207,31 @@ export default function DiscoverPage() {
           ))}
         </div>
       </div>
+
+      {/* Always-on, not tied to live /status — right where someone would
+          try to subscribe: Openfort's plan is currently over its included
+          operations, so a brand-new subscription's first automatic charge
+          may not fire right away. Subscribing itself still works fine. */}
+      <GlassPanel
+        hairline
+        className="mb-6 flex items-center gap-3 px-5 py-4"
+        style={{ animation: 'fadeUp 0.7s ease both' }}
+      >
+        <span
+          aria-hidden
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-ink/50 text-[11px] font-semibold text-ink"
+        >
+          i
+        </span>
+        <p className="text-sm text-ink-muted">
+          Openfort&apos;s operations limit is reached, so new auto-charges may be delayed —
+          subscribing and cross-chain funding still work. See{' '}
+          <Link href="/dashboard/subscriptions" className="text-ink underline underline-offset-2">
+            Activity
+          </Link>{' '}
+          for past transactions.
+        </p>
+      </GlassPanel>
 
       {error && <p className="text-sm text-danger">{error}</p>}
 
@@ -273,7 +309,12 @@ export default function DiscoverPage() {
         </section>
       )}
 
-      <PlanDetailModal plan={selectedPlan} onClose={() => setSelectedPlan(null)} onSubscribed={refetch} />
+      <PlanDetailModal
+        plan={selectedPlan}
+        paymentHealth={paymentHealth}
+        onClose={() => setSelectedPlan(null)}
+        onSubscribed={refetch}
+      />
       <SubDetailModal
         sub={selectedSub}
         plan={selectedSub ? (plans.find((p) => p.id === selectedSub.planId) ?? null) : null}

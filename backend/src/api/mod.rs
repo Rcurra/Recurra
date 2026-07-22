@@ -1,4 +1,5 @@
 mod payments;
+mod status;
 mod subscriptions;
 
 use axum::{Router, routing::get};
@@ -16,5 +17,6 @@ pub fn router(state: AppState) -> Router {
         .route("/plans", get(subscriptions::list_plans))
         .route("/plans/{id}", get(subscriptions::get_plan))
         .route("/payments", get(payments::list))
+        .route("/status", get(status::get))
         .with_state(state)
 }
