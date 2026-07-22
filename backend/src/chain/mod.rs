@@ -444,11 +444,21 @@ impl AppState {
     /// rejects any wide historical `getLogs` outright ("Archive requests
     /// require a personal token"), no matter the window size, the exact thing
     /// the frontend's `lib/receipts.ts` already hit and fixed. Same fix here:
-    /// route log scans (and the block-timestamp lookups they need) through
-    /// Arbitrum's own official RPC, which has no such cap — used only for
-    /// this method, not `self.provider`'s normal per-request calls, since
-    /// switching those wholesale isn't necessary and this endpoint is better
-    /// reserved for the occasional wide scan.
+    /// route log scans through Tenderly's public Arbitrum Sepolia gateway
+    /// instead — used only for this method, not `self.provider`'s normal
+    /// per-request calls, since switching those wholesale isn't necessary and
+    /// this endpoint is better reserved for the occasional wide scan.
+    ///
+    /// Found live 2026-07-22: Arbitrum's own official RPC (the previous
+    /// choice here, and still no cap on wide scans either) returns a literal
+    /// `blockTimestamp: 0x0` on every log instead of the real value, forcing
+    /// a separate `eth_getBlockByNumber` per unique block — one real
+    /// subscriber's 719-payment history took 66s cold because of it (719
+    /// payments, 719 distinct blocks, no batching possible). Tenderly's
+    /// gateway returns the genuine timestamp inline (verified against real
+    /// chain data), so the per-block lookup below almost never fires now —
+    /// kept only as a defensive fallback for whatever log some future RPC
+    /// swap might still send back without one.
     ///
     /// A full deploy-block-to-tip scan on every request is fine at Sepolia's
     /// current history size; the natural ceiling is pagination or an indexer
@@ -475,7 +485,7 @@ impl AppState {
         }
 
         let logs_provider: DynProvider = if self.chain_id == 421_614 {
-            let url: reqwest::Url = "https://sepolia-rollup.arbitrum.io/rpc"
+            let url: reqwest::Url = "https://arbitrum-sepolia.gateway.tenderly.co"
                 .parse()
                 .expect("hardcoded URL is valid");
             ProviderBuilder::new().connect_http(url).erased()
