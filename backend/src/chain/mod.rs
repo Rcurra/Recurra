@@ -20,7 +20,7 @@ use chrono::{DateTime, Utc};
 
 use crate::config::Config;
 use crate::errors::AppError;
-use crate::models::{Payment, Plan, Subscription};
+use crate::models::{Payment, PaymentHealth, Plan, Subscription};
 use crate::openfort::OpenfortClient;
 use crate::sender::TxSender;
 use bindings::{PaymentExecutor, SubscriptionRegistry};
@@ -63,6 +63,12 @@ pub struct AppState {
     /// hundreds of known blocks on every 30s payments-cache expiry (each
     /// new charge adds ~1 genuinely new block per scan, not 250).
     block_timestamps: Arc<Mutex<HashMap<u64, DateTime<Utc>>>>,
+    /// Last known payment-submit health, flipped by the scheduler's own
+    /// submit attempts and read by `GET /status`. `Arc<Mutex<_>>` so every
+    /// `AppState` clone (API handlers, the scheduler task) shares one view —
+    /// a request answered from a stale per-clone copy would defeat the
+    /// point of warning the dashboard before a subscribe.
+    payment_health: Arc<Mutex<PaymentHealth>>,
     /// Raw config, kept for the scheduler interval, vault address, etc.
     pub cfg: Config,
 }
@@ -99,6 +105,17 @@ fn signer_check(derived_signer: Option<Address>, onchain_authorized: Address) ->
         },
         None => SignerCheck::Unverifiable,
     }
+}
+
+/// Recognizes Openfort's operations-quota 402 by the exact phrasing seen
+/// live 2026-07-22 (`"You have reached the included 2,000 operations for
+/// your current plan. A payment method is required to continue..."`) inside
+/// the wrapped CLI error text. Pulled out as a pure function — same reason
+/// `signer_check` is — so the classification is unit-testable without
+/// spinning up an `AppState`/live RPC just to prove a string match.
+fn is_quota_exceeded(detail: &str) -> bool {
+    const QUOTA_MARKERS: [&str; 2] = ["reached the included", "payment method is required"];
+    QUOTA_MARKERS.iter().any(|m| detail.contains(m))
 }
 
 impl AppState {
@@ -264,8 +281,43 @@ impl AppState {
             scheduler_enabled,
             payments_cache: Arc::new(Mutex::new(HashMap::new())),
             block_timestamps: Arc::new(Mutex::new(HashMap::new())),
+            payment_health: Arc::new(Mutex::new(PaymentHealth::default())),
             cfg,
         })
+    }
+
+    /// Current payment health for `GET /status`.
+    pub fn payment_health(&self) -> PaymentHealth {
+        self.payment_health.lock().unwrap().clone()
+    }
+
+    /// Record a failed `executePayment` submit. Only flips `degraded` on for
+    /// causes recognized as systemic (right now: the Openfort operations-quota
+    /// block) — a one-off RPC blip shouldn't put a scary banner in front of
+    /// every user. `detail` is the raw error text (CLI stderr/stdout, RPC
+    /// error); never stored or returned as-is, since it can carry account IDs
+    /// or other infra detail — only the classified, human copy is kept.
+    pub fn record_payment_failure(&self, detail: &str) {
+        if !is_quota_exceeded(detail) {
+            return;
+        }
+        let mut health = self.payment_health.lock().unwrap();
+        if !health.degraded {
+            health.since = Some(Utc::now());
+        }
+        health.degraded = true;
+        health.message = Some(
+            "Recurring charges are paused — our payments provider (Openfort) has hit its \
+             plan's operation limit and needs a plan upgrade before charges can resume. \
+             New subscriptions are still recorded, but won't be charged automatically \
+             until this clears."
+                .to_string(),
+        );
+    }
+
+    /// Clear degraded status after a submit actually succeeds.
+    pub fn record_payment_success(&self) {
+        *self.payment_health.lock().unwrap() = PaymentHealth::default();
     }
 
     /// Read a single subscription by id. Returns `Ok(None)` when the id doesn't
@@ -679,6 +731,24 @@ fn map_payment(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quota_exceeded_matches_the_real_openfort_402_text() {
+        // Verbatim from the wrapped CLI error captured live 2026-07-22
+        // (backend::openfort's "chain error: openfort CLI exited with exit
+        // status 1: {...}" wrapping Openfort's own JSON body).
+        let real_error = "chain error: openfort CLI exited with exit status: 1: {\n  \"code\": \"UNKNOWN\",\n  \"message\": \"An unexpected error occurred: You have reached the included 2,000 operations for your current plan. A payment method is required to continue. Please add a payment method or upgrade your plan.\"\n}";
+        assert!(is_quota_exceeded(real_error));
+    }
+
+    #[test]
+    fn quota_exceeded_ignores_unrelated_submit_failures() {
+        // A local-signer insufficient-funds error (real text hit against
+        // anvil during manual testing) must NOT flip the degraded banner —
+        // only the specific systemic Openfort cause should.
+        let unrelated = "chain error: local tx submit failed: server returned an error response: error code -32003: Insufficient funds for gas * price + value";
+        assert!(!is_quota_exceeded(unrelated));
+    }
 
     #[test]
     fn map_subscription_checksums_address_and_converts_timestamp() {

@@ -1,4 +1,5 @@
-use std::time::Duration;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use alloy::primitives::U256;
 use tokio::time;
@@ -8,22 +9,74 @@ use crate::chain::bindings::PaymentExecutor;
 use crate::errors::AppError;
 use crate::models::Subscription;
 
+/// Longest gap between retries once a subscription's submit keeps failing
+/// (e.g. an exhausted Openfort operations quota, seen live 2026-07-22: the
+/// same due sub got resubmitted every 60s tick for 15+ minutes straight,
+/// each attempt 402ing). Long enough to stop spamming the provider once a
+/// tick's failure looks systemic; short enough that service resumes within
+/// the hour once the underlying issue (e.g. adding a payment method) clears.
+const MAX_BACKOFF_SECS: u64 = 1800;
+
+/// Per-subscription record of consecutive submit failures, so a doomed
+/// resubmit isn't retried every single tick. Keyed by subscription id;
+/// cleared on a successful submit. Lives for the lifetime of one `run` loop
+/// (or one test), not persisted across restarts — a fresh process is
+/// entitled to try again immediately rather than inherit a stale backoff.
+#[derive(Default)]
+pub struct SubmitBackoff(HashMap<u64, BackoffEntry>);
+
+struct BackoffEntry {
+    consecutive_failures: u32,
+    retry_after: Instant,
+}
+
+impl SubmitBackoff {
+    fn should_skip(&self, sub_id: u64) -> bool {
+        self.0
+            .get(&sub_id)
+            .is_some_and(|e| Instant::now() < e.retry_after)
+    }
+
+    fn record_failure(&mut self, sub_id: u64, base_interval: Duration) {
+        let entry = self.0.entry(sub_id).or_insert(BackoffEntry {
+            consecutive_failures: 0,
+            retry_after: Instant::now(),
+        });
+        entry.consecutive_failures += 1;
+        // Doubles each failure (interval, 2x, 4x, ...), capped — the cap is
+        // what turns "retry forever every tick" into "retry occasionally".
+        let backoff_secs = base_interval
+            .as_secs()
+            .saturating_mul(1u64 << entry.consecutive_failures.min(10))
+            .min(MAX_BACKOFF_SECS);
+        entry.retry_after = Instant::now() + Duration::from_secs(backoff_secs);
+    }
+
+    fn record_success(&mut self, sub_id: u64) {
+        self.0.remove(&sub_id);
+    }
+}
+
 // Wakes up every `cfg.scheduler_interval_secs` seconds, checks the registry for
 // overdue subscriptions, and (once contracts land) fires payments through Openfort.
 pub async fn run(state: AppState) {
     let mut ticker = time::interval(Duration::from_secs(state.cfg.scheduler_interval_secs));
+    let mut backoff = SubmitBackoff::default();
 
     loop {
         ticker.tick().await;
         tracing::info!("scheduler tick — checking for due subscriptions");
 
-        if let Err(e) = process_due_subscriptions(&state).await {
+        if let Err(e) = process_due_subscriptions(&state, &mut backoff).await {
             tracing::error!("scheduler error: {e}");
         }
     }
 }
 
-async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
+async fn process_due_subscriptions(
+    state: &AppState,
+    backoff: &mut SubmitBackoff,
+) -> Result<(), AppError> {
     // 1. Ask the registry which subscriptions are due. Due-ness is decided
     //    on-chain via `isDue(subId)` (single source of truth) rather than an
     //    off-chain timestamp compare, so scheduler clock drift can never make us
@@ -37,7 +90,7 @@ async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
 
     tracing::info!(count = due.len(), "found due subscriptions");
 
-    process_subscriptions(state, due).await
+    process_subscriptions(state, due, backoff).await
 }
 
 /// The per-subscription triage-and-fire loop, split from the due-list fetch
@@ -51,6 +104,7 @@ async fn process_due_subscriptions(state: &AppState) -> Result<(), AppError> {
 pub async fn process_subscriptions(
     state: &AppState,
     due: Vec<Subscription>,
+    backoff: &mut SubmitBackoff,
 ) -> Result<(), AppError> {
     // Without an executor address we can't fire — stay in log-only mode rather
     // than erroring every tick.
@@ -74,6 +128,15 @@ pub async fn process_subscriptions(
     //    submit a real tx when it would succeed. A per-sub failure `continue`s
     //    past — one bad sub must never abort the batch.
     for sub in due {
+        // A sub whose last submit failed (e.g. Openfort quota 402) sits out
+        // until its backoff window elapses — otherwise this loop resubmits
+        // the same doomed tx every tick, forever, at whatever rate the
+        // provider is already rejecting it.
+        if backoff.should_skip(sub.id) {
+            tracing::info!(sub_id = sub.id, "skip: backing off after submit failures");
+            continue;
+        }
+
         let sub_id = U256::from(sub.id);
         let call = executor_contract.executePayment(sub_id).from(authorized);
 
@@ -122,6 +185,8 @@ pub async fn process_subscriptions(
         let calldata = call.calldata().clone();
         match state.sender.send(executor, calldata).await {
             Ok(tx_hash) => {
+                backoff.record_success(sub.id);
+                state.record_payment_success();
                 tracing::info!(
                     sub_id = sub.id,
                     plan_id = sub.plan_id,
@@ -142,7 +207,14 @@ pub async fn process_subscriptions(
                     );
                 }
             }
-            Err(e) => tracing::error!(sub_id = sub.id, error = %e, "submit failed"),
+            Err(e) => {
+                backoff.record_failure(
+                    sub.id,
+                    Duration::from_secs(state.cfg.scheduler_interval_secs),
+                );
+                state.record_payment_failure(&e.to_string());
+                tracing::error!(sub_id = sub.id, error = %e, "submit failed");
+            }
         }
     }
 

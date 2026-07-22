@@ -1,4 +1,4 @@
-import type { Payment, Plan, Subscription } from '@/types';
+import type { Payment, PaymentHealth, Plan, Subscription } from '@/types';
 import { getUsdcAddress } from '@/lib/contracts';
 
 // The ONLY file that talks to the backend. Two jobs:
@@ -42,6 +42,12 @@ interface PaymentWire {
   tx_hash: string;
   block_number: number;
   timestamp: string;
+}
+
+interface PaymentHealthWire {
+  degraded: boolean;
+  message: string | null;
+  since: string | null;
 }
 
 export class ApiError extends Error {
@@ -90,6 +96,12 @@ const toSubscription = (w: SubscriptionWire): Subscription => ({
   active: w.active,
 });
 
+const toPaymentHealth = (w: PaymentHealthWire): PaymentHealth => ({
+  degraded: w.degraded,
+  message: w.message,
+  since: w.since ? new Date(w.since) : null,
+});
+
 const toPayment = (w: PaymentWire): Payment => ({
   subId: w.sub_id,
   subscriber: w.subscriber,
@@ -133,5 +145,8 @@ export const api = {
       const query = `?subscriber=${encodeURIComponent(subscriber)}`;
       return (await get<PaymentWire[]>(`/payments${query}`)).map(toPayment);
     },
+  },
+  status: {
+    get: async (): Promise<PaymentHealth> => toPaymentHealth(await get<PaymentHealthWire>('/status')),
   },
 };
